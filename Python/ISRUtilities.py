@@ -26,7 +26,7 @@ def paperColors(i,alpha='ff'):
               'ripples':   "#1f99a3", # 10. ripples
               'deltas':    "#c80000", # 11. deltas
               'spindles':  "#2a619e", # 12. spindles
-              'shuffle':   "#666666", # 13. shuffle
+              'shuffle':   "#888888", # 13. shuffle
               'v1':        "#f4ce32", # 4bis. V1
               'amy':       "#f4ce32", # 4bis. AMY
               'lamy':      "#f4ce32", # 4bis. left AMY
@@ -81,6 +81,43 @@ def ISCycles(isa,on,return_off=False):
         return cycles, off
 
     return cycles
+
+
+def ISTransitions(isa,on,min_duration=None):
+    # min_duration: [min on duration, min off duration]
+
+    # 1. OFF-ON transitions
+    _, valid = fma.general.restrict(on[:,0]-.0001,isa,s_ind=True)
+    if min_duration is not None:
+        valid_where = np.where(valid)[0]
+        valid_for_off = (on[valid_where,0] - on[valid_where-1,1] > min_duration[1]) # duration of preceding OFF
+        valid_for_on = (on[valid_where,1] - on[valid_where,0] > min_duration[0]) # duration of following ON
+        valid = valid_where[valid_for_off & valid_for_on]
+    off_on = on[valid,0]
+
+    # 1. ON-OFF transitions
+    _, valid = fma.general.restrict(on[:,1]+.0001,isa,s_ind=True)
+    if min_duration is not None:
+        print('implement!') # WATCH OUT FOR ASSUMPTION THAT isa ENDS WITH ON
+    on_off = on[valid,1]
+
+    return off_on, on_off
+
+
+def isCoupled(times_a,times_b,windows):
+    # smallest times_b following each event a
+    idx = np.searchsorted(times_b,times_a,side='right')
+    valid = idx < len(times_b)
+    distance = np.full_like(times_a,np.nan,dtype=float)
+    distance[valid] = times_b[idx[valid]] - times_a[valid]
+    is_coupled_a = (distance >= windows[0]) & (distance <= windows[1])
+    # highest times_a preceding each event b
+    idx = np.searchsorted(times_a,times_b,side="left") - 1
+    valid = idx >= 0
+    distance = np.full_like(times_b,np.nan,dtype=float)
+    distance[valid] = times_b[valid] - times_a[idx[valid]]
+    is_coupled_b = (distance >= windows[0]) & (distance <= windows[1])
+    return is_coupled_a, is_coupled_b
 
 
 ''' old functions
