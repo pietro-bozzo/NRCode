@@ -121,6 +121,35 @@ def isCoupled(times_a,times_b,windows):
     return is_coupled_a, is_coupled_b
 
 
+def loadHpcPfcEvents(session,names=None,coupl=None,delta='all'):
+
+    # 1. load
+    if names is None: names = ['ripples','deltaWaves','spindles']
+    events = {}
+    for name in names:
+        try:
+            ev, _ = fma.data.loadEvents(session,name)
+            events[name] = ev[name]['col1'] if 'col1' in ev[name] else ev[name]['peaks']
+        except FileNotFoundError:
+            events[name] = []
+
+    # 2. assess coupling
+    if coupl:
+        is_coupled = {}
+        is_coupled['ripples'], is_coupled['deltas_rip'] = isCoupled(events['ripples'],events['deltaWaves'],[0.05,0.25])  # [0.05,0.25]
+        is_coupled['deltas_spin'], is_coupled['spindles'] = isCoupled(events['deltaWaves'],events['spindles'],[0.1,1.3])  # [0.1,1.3]
+        match delta:
+            case 'ripples':
+                is_coupled['deltaWaves'] = is_coupled['deltas_rip']
+            case 'spindles':
+                is_coupled['deltaWaves'] = is_coupled['deltas_spin']
+            case _:
+                is_coupled['deltaWaves'] = is_coupled['deltas_rip'] & is_coupled['deltas_spin']
+        return events, is_coupled
+
+    return events
+
+
 ''' old functions
 
 # function to train GLM
