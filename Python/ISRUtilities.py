@@ -121,7 +121,7 @@ def isCoupled(times_a,times_b,windows):
     return is_coupled_a, is_coupled_b
 
 
-def loadHpcPfcEvents(session,names=None,coupl=None,delta='all'):
+def loadHpcPfcEvents(session,names=None,coupl=None,delta='all',isa=None):
 
     # 1. load
     if names is None: names = ['ripples','deltaWaves','spindles']
@@ -132,6 +132,7 @@ def loadHpcPfcEvents(session,names=None,coupl=None,delta='all'):
             events[name] = ev[name]['col1'] if 'col1' in ev[name] else ev[name]['peaks']
         except FileNotFoundError:
             events[name] = []
+    out = (events,)
 
     # 2. assess coupling
     if coupl:
@@ -145,9 +146,14 @@ def loadHpcPfcEvents(session,names=None,coupl=None,delta='all'):
                 is_coupled['deltaWaves'] = is_coupled['deltas_spin']
             case _:
                 is_coupled['deltaWaves'] = is_coupled['deltas_rip'] & is_coupled['deltas_spin']
-        return events, is_coupled
+        out = (events, is_coupled)
 
-    return events
+    # 3. assess ISA
+    if isa is not None:
+        is_isa = {e: fma.general.restrict(events[e],isa,s_ind=True)[1] for e in events}
+        out = (*out, is_isa)
+
+    return out if len(out) > 1 else out[0]
 
 
 ''' old functions
