@@ -156,6 +156,35 @@ def loadHpcPfcEvents(session,names=None,coupl=None,delta='all',isa=None):
     return out if len(out) > 1 else out[0]
 
 
+def epochIndex(events,epochs,duration=None,nrem=None):
+
+    if duration is not None:
+        nrem = fma.general.intersectIntervals((nrem,epochs))
+        _, nrem_epoch_idx = fma.general.restrict(nrem[:,0],epochs,i_ind=True)
+
+        # cumulative nREM duration per epoch
+        nrem_start = np.full(len(epochs),np.nan)
+        u, idx = np.unique(nrem_epoch_idx,return_index=True)
+        nrem_cum_dur = np.insert(np.cumsum(np.diff(nrem)),0,0)
+        nrem_start[u] = nrem_cum_dur[idx]
+        nrem_start[np.isnan(nrem_start)] = nrem_start[np.where(np.isnan(nrem_start))[0] + 1]
+
+    epoch_idx = {}
+    for event in events:
+
+        # assign epoch indexes
+        events[event], epoch_idx[event] = fma.general.restrict(events[event],epochs,i_ind=True)
+        epoch_idx[event] += 1
+
+        # shift to compute duration
+        if duration is not None:
+            shifted, nrem_idx = fma.general.restrict(events[event],nrem,shift=True,i_ind=True)
+            shifted -= nrem_start[nrem_epoch_idx[nrem_idx]] # make shifted times relative to their epoch start
+            epoch_idx[event][shifted > duration] *= -1 # WHAT ABOUT ZERO
+
+    return events, epoch_idx
+
+
 ''' old functions
 
 # function to train GLM
