@@ -105,6 +105,37 @@ def ISTransitions(isa,on,min_duration=None):
     return off_on, on_off
 
 
+def ISPhase(phase_times,dt=0.001,isa=None):
+
+    range = np.array([0,2*np.pi])
+    t_phi = np.concatenate(list(phase_times.values()))
+    phi = np.concatenate([np.full(len(times),phase) for phase, times in phase_times.items()])
+
+    # sort by time
+    t_phi, valid = np.unique(t_phi,return_index=True)
+    phi = phi[valid]
+
+    # unwrap phase
+    unwrap_idx = phi[1:] < phi[:-1]
+    unwrap_idx = np.insert(np.cumsum(unwrap_idx),0,0)
+    phi += unwrap_idx * np.diff(range)
+
+    # interpolate and wrap phase
+    t = np.arange(t_phi[0], t_phi[-1]+dt/2, dt)
+    phi = np.interp(t,t_phi,phi)
+    phi = np.mod(phi,np.diff(range))
+    phi = np.column_stack((t,phi))
+
+    # restrict to ISA
+    if isa is not None:
+        phi = fma.general.restrict(phi,isa)
+
+    # fraction of time spent in ON
+    on_fraction = np.sum((phi[:,1] > range[0]) & (phi[:,1] < range.mean())) / len(phi)
+
+    return phi, on_fraction
+
+
 def isCoupled(times_a,times_b,windows):
     # smallest times_b following each event a
     idx = np.searchsorted(times_b,times_a,side='right')
@@ -137,8 +168,8 @@ def loadHpcPfcEvents(session,names=None,coupl=None,delta='all',isa=None):
     # 2. assess coupling
     if coupl:
         is_coupled = {}
-        is_coupled['ripples'], is_coupled['deltas_rip'] = isCoupled(events['ripples'],events['deltaWaves'],[0.05,0.25])  # [0.05,0.25]
-        is_coupled['deltas_spin'], is_coupled['spindles'] = isCoupled(events['deltaWaves'],events['spindles'],[0.1,1.3])  # [0.1,1.3]
+        is_coupled['ripples'], is_coupled['deltas_rip'] = isCoupled(events['ripples'],events['deltaWaves'],[0.05,0.25]) # [0.05,0.25]
+        is_coupled['deltas_spin'], is_coupled['spindles'] = isCoupled(events['deltaWaves'],events['spindles'],[0.1,1.3]) # [0.1,1.3]
         match delta:
             case 'ripples':
                 is_coupled['deltaWaves'] = is_coupled['deltas_rip']
@@ -180,7 +211,7 @@ def epochIndex(events,epochs,duration=None,nrem=None):
         if duration is not None:
             shifted, nrem_idx = fma.general.restrict(events[event],nrem,shift=True,i_ind=True)
             shifted -= nrem_start[nrem_epoch_idx[nrem_idx]] # make shifted times relative to their epoch start
-            epoch_idx[event][shifted > duration] *= -1 # WHAT ABOUT ZERO
+            epoch_idx[event][shifted > duration] *= -1
 
     return events, epoch_idx
 
