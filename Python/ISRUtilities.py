@@ -105,7 +105,7 @@ def ISTransitions(isa,on,min_duration=None):
     return off_on, on_off
 
 
-def ISPhase(phase_times,dt=0.001,isa=None):
+def ISPhase(phase_times,dt=0.0001,isa=None):
 
     range = np.array([0,2*np.pi])
     t_phi = np.concatenate(list(phase_times.values()))
