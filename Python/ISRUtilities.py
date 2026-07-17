@@ -1,5 +1,8 @@
 import numpy as np
 import fmatoolbox as fma
+import matplotlib.axes as mpla
+from matplotlib.pyplot import yticks
+
 
 def paperColors(i,alpha='ff'):
     # get colors for Nucleus Reuniens Infra-Slow Rhythm paper
@@ -59,6 +62,68 @@ def paperColors(i,alpha='ff'):
                 o = colors[j.lower()] if j.lower() in colors else colors['th']
                 out.append(o + alpha)
         return out
+
+
+def ISAxes(axs, double:bool=None, **ax_kwargs):
+
+    if isinstance(axs,mpla._axes.Axes):
+        axs = [axs]
+    elif isinstance(axs,np.ndarray):
+        axs = axs.ravel()
+    if double is None: double = False
+
+    on_color = '#444444'
+    off_color = '#c9a6f7'
+    lw = 3
+
+    for ax in axs:
+        if ax.name == 'polar':
+            ax.set_theta_zero_location('S')
+            ax.spines['polar'].set_visible(False)
+            ax.set_xticks([0,np.pi/2,4*np.pi/6,np.pi,3*np.pi/2,10*np.pi/6],['','','ON','','','OFF'],fontsize=12)
+            ax.set(yticks=[])
+
+            labels = ax.get_xticklabels()
+            labels[2].set_color(on_color)
+            labels[5].set_color(off_color)
+
+            gridlines = ax.xaxis.get_gridlines()
+            for i in [0,1,3,4]:
+                gridlines[i].set_zorder(i)
+            for i in [2,5]:
+                gridlines[i].set_visible(False)
+
+            ax.set(**ax_kwargs)
+            ylim = ax.get_ylim()
+
+            theta = np.linspace(0,np.pi,200)
+            ax.plot(theta,np.full_like(theta,ylim[1]),lw=lw,color=on_color,clip_on=False,zorder=5)
+            ax.plot(theta+np.pi,np.full_like(theta,ylim[1]),lw=lw,color=off_color,clip_on=False,zorder=6)
+            ax.scatter(np.pi,ylim[1],s=80,color=on_color,marker='<',clip_on=False,zorder=7)
+            ax.scatter(0,ylim[1],s=80,color=off_color,marker='>',clip_on=False,zorder=8)
+            ax.set_ylim(ylim)
+
+        else:
+            ax.spines['bottom'].set_visible(False)
+
+            x_ticks = np.arange(0,(double+1)*2*np.pi,np.pi) + np.pi/2
+            ax.set_xticks(x_ticks,['ON','OFF']*(double+1),fontsize=12)
+            labels = ax.get_xticklabels()
+            for i in range(double+1):
+                labels[2*i].set_color(on_color)
+                labels[2*i+1].set_color(off_color)
+            ax.tick_params(axis='x',length=0)
+
+            ax.set(**ax_kwargs)
+            ylim = ax.get_ylim()
+            x_coord = [0,np.pi]
+            if double:
+                x_coord.extend([np.nan,2*np.pi,3*np.pi])
+            ax.plot(x_coord,np.full_like(x_coord,ylim[0]),lw=lw,color=on_color,clip_on=False)
+            ax.plot(np.array(x_coord)+np.pi,np.full_like(x_coord,ylim[0]),lw=lw,color=off_color,clip_on=False)
+            ax.set_ylim(ylim)
+
+    return
 
 
 def ISCycles(isa,on,return_off=False):
