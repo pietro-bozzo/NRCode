@@ -1,0 +1,6 @@
+# set path to venv managed by uv, use as:
+# $ ./uvProj sync
+# $ ./uvProj add <package>
+#!/bin/sh
+export UV_PROJECT_ENVIRONMENT=$HOME/uvEnvs/NRPyTorch
+exec uv "$@"
