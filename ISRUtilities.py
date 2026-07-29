@@ -74,7 +74,7 @@ def ISAxes(axs, double:bool=None, **ax_kwargs):
 
     on_color = '#444444'
     off_color = '#c9a6f7'
-    lw = 3
+    lw = {'cartesian': 2, 'polar': 3}
 
     for ax in axs:
         if ax.name == 'polar':
@@ -97,8 +97,8 @@ def ISAxes(axs, double:bool=None, **ax_kwargs):
             ylim = ax.get_ylim()
 
             theta = np.linspace(0,np.pi,200)
-            ax.plot(theta,np.full_like(theta,ylim[1]),lw=lw,color=on_color,clip_on=False,zorder=5)
-            ax.plot(theta+np.pi,np.full_like(theta,ylim[1]),lw=lw,color=off_color,clip_on=False,zorder=6)
+            ax.plot(theta,np.full_like(theta,ylim[1]),lw=lw['polar'],color=on_color,clip_on=False,zorder=5)
+            ax.plot(theta+np.pi,np.full_like(theta,ylim[1]),lw=lw['polar'],color=off_color,clip_on=False,zorder=6)
             ax.scatter(np.pi,ylim[1],s=80,color=on_color,marker='<',clip_on=False,zorder=7)
             ax.scatter(0,ylim[1],s=80,color=off_color,marker='>',clip_on=False,zorder=8)
             ax.set_ylim(ylim)
@@ -112,15 +112,15 @@ def ISAxes(axs, double:bool=None, **ax_kwargs):
             for i in range(double+1):
                 labels[2*i].set_color(on_color)
                 labels[2*i+1].set_color(off_color)
-            ax.tick_params(axis='x',length=0)
+            ax.tick_params(axis='x',length=0,pad=3)
 
             ax.set(**ax_kwargs)
             ylim = ax.get_ylim()
             x_coord = [0,np.pi]
             if double:
                 x_coord.extend([np.nan,2*np.pi,3*np.pi])
-            ax.plot(x_coord,np.full_like(x_coord,ylim[0]),lw=lw,color=on_color,clip_on=False)
-            ax.plot(np.array(x_coord)+np.pi,np.full_like(x_coord,ylim[0]),lw=lw,color=off_color,clip_on=False)
+            ax.plot(x_coord,np.full_like(x_coord,ylim[0]),lw=lw['cartesian'],color=on_color,clip_on=False)
+            ax.plot(np.array(x_coord)+np.pi,np.full_like(x_coord,ylim[0]),lw=lw['cartesian'],color=off_color,clip_on=False)
             ax.set_ylim(ylim)
 
     return
