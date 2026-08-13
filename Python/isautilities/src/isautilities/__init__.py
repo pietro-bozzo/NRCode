@@ -1,1 +1,1 @@
-from ISAUtilities import *
+from .ISAUtilities import *
