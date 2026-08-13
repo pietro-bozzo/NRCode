@@ -2,3 +2,6 @@
 .vscode
 .idea
 *.asv
+*.egg-info
+dist/
+build/
