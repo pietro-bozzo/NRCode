@@ -29,7 +29,7 @@ def paperColors(i,alpha='ff'):
               'ripples':       "#87b69e", # 10. ripples, was "#1f99a3"
               'deltas':        "#c80000", # 11. deltas
               'spindles':      "#fc7860", # 12. spindles, was #2a619e
-              'shuffle':       "#700000", # 13. shuffle
+              'shuffle':       "#aaaaaa", # 13. shuffle
               'v1':            "#f4ce32", # 4bis. V1
               'amy':           "#f4ce32", # 4bis. AMY
               'lamy':          "#f4ce32", # 4bis. left AMY
@@ -170,9 +170,6 @@ def ISTransitions(isa,on,min_duration=None):
     return off_on, on_off
 
 
-
-
-
 def ISPhase(phase_times,dt=0.0001,isa=None):
 
     range = np.array([0,2*np.pi])
@@ -202,6 +199,17 @@ def ISPhase(phase_times,dt=0.0001,isa=None):
     on_fraction = np.sum((phi[:,1] > range[0]) & (phi[:,1] < range.mean())) / len(phi)
 
     return phi, on_fraction
+
+
+def isISA(samples,isa,sleep):
+    # out: 0 ISA, 1 sleep nISA, 2 wake nISA
+    _, is_isa = fma.general.restrict(samples,isa,s_ind=True)
+    _, is_sleep = fma.general.restrict(samples,sleep,s_ind=True)
+    out = np.full_like(is_isa,2,dtype=int)
+    out[is_sleep] = 1
+    out[is_isa] = 0
+
+    return out
 
 
 def isCoupled(times_a,times_b,windows):
@@ -240,6 +248,8 @@ def loadHpcPfcEvents(session, names=None, regions=None, coupl=None, delta='all',
                 events[name] = ev[name]['col1'] if 'col1' in ev[name] else ev[name]['peaks']
             except FileNotFoundError:
                 events[name] = []
+    if 'deltaWaves' not in events and 'down' in events:
+        events['deltaWaves'] = events['down']
     out = (events,)
 
     # 2. assess coupling
