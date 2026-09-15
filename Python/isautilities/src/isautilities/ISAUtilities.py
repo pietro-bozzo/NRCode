@@ -26,9 +26,9 @@ def paperColors(i,alpha='ff'):
               'wake':          "#fff3b6", # 7. wake
               'on':            "#d8e9bc", # 8. NR "up state"
               'off':           "#bee5eb", # 9. NR "down state"
-              'ripples':       "#87b69e", # 10. ripples, was "#1f99a3"
-              'deltas':        "#c80000", # 11. deltas
-              'spindles':      "#fc7860", # 12. spindles, was #2a619e
+              'ripples':       "#498a4e", # 10. ripples, was "#1f99a3"
+              'deltas':        "#2f4b7c", # 11. deltas
+              'spindles':      "#789de7", # 12. spindles, was #2a619e
               'shuffle':       "#aaaaaa", # 13. shuffle
               'v1':            "#f4ce32", # 4bis. V1
               'amy':           "#f4ce32", # 4bis. AMY
@@ -42,7 +42,8 @@ def paperColors(i,alpha='ff'):
               'rvhpc':         "#f4ce32", # 4bis. right ventral HPC
               'ldhpc':         "#f4ce32", # 4bis. left dorsal HPC
               'rdhpc':         "#f4ce32", # 4bis. right dorsal HPC
-              'deltawaves':    "#c80000", # 11bis. deltas
+              'deltawaves':    "#2f4b7c", # 11bis. deltas
+              'down':          "#2f4b7c", # 11tris. deltas
               }
     n_colors = len(colors)
     for j, key in enumerate(tuple(colors)):
@@ -64,7 +65,7 @@ def paperColors(i,alpha='ff'):
         return out
 
 
-def ISAxes(axs, double:bool=None, **ax_kwargs):
+def ISAxes(axs, double:bool=None, format='paper', **ax_kwargs):
 
     if isinstance(axs,mpla._axes.Axes):
         axs = [axs]
@@ -74,18 +75,24 @@ def ISAxes(axs, double:bool=None, **ax_kwargs):
 
     on_color = '#444444'
     off_color = '#c9a6f7'
-    lw = {'cartesian': 2, 'polar': 3}
+    lw = {'cartesian': 2, 'polar': 3} if format == 'paper' else {'cartesian': 3, 'polar': 5}
+    s = 80 if format == 'paper' else 150
+    fs = 11 if format == 'paper' else 16
+    pad = 3 if format == 'paper' else 11
 
     for ax in axs:
         if ax.name == 'polar':
             ax.set_theta_zero_location('S')
             ax.spines['polar'].set_visible(False)
-            ax.set_xticks([0,np.pi/2,4*np.pi/6,np.pi,3*np.pi/2,10*np.pi/6],['','','ON','','','OFF'],fontsize=12)
+            ax.set_xticks([0,np.pi/2,4*np.pi/6,np.pi,3*np.pi/2,10*np.pi/6],['','','ON','','','OFF'],fontsize=fs)
             ax.set(yticks=[])
 
             labels = ax.get_xticklabels()
             labels[2].set_color(on_color)
             labels[5].set_color(off_color)
+            labels[2].set_weight('bold')
+            labels[5].set_weight('bold')
+            ax.tick_params(axis='x', pad=pad)
 
             gridlines = ax.xaxis.get_gridlines()
             for i in [0,1,3,4]:
@@ -99,20 +106,22 @@ def ISAxes(axs, double:bool=None, **ax_kwargs):
             theta = np.linspace(0,np.pi,200)
             ax.plot(theta,np.full_like(theta,ylim[1]),lw=lw['polar'],color=on_color,clip_on=False,zorder=5)
             ax.plot(theta+np.pi,np.full_like(theta,ylim[1]),lw=lw['polar'],color=off_color,clip_on=False,zorder=6)
-            ax.scatter(np.pi,ylim[1],s=80,color=on_color,marker='<',clip_on=False,zorder=7)
-            ax.scatter(0,ylim[1],s=80,color=off_color,marker='>',clip_on=False,zorder=8)
+            ax.scatter(np.pi,ylim[1],s=s,color=on_color,marker='<',clip_on=False,zorder=7)
+            ax.scatter(0,ylim[1],s=s,color=off_color,marker='>',clip_on=False,zorder=8)
             ax.set_ylim(ylim)
 
         else:
             ax.spines['bottom'].set_visible(False)
 
             x_ticks = np.arange(0,(double+1)*2*np.pi,np.pi) + np.pi/2
-            ax.set_xticks(x_ticks,['ON','OFF']*(double+1),fontsize=12)
+            ax.set_xticks(x_ticks,['ON','OFF']*(double+1),fontsize=fs)
             labels = ax.get_xticklabels()
             for i in range(double+1):
                 labels[2*i].set_color(on_color)
                 labels[2*i+1].set_color(off_color)
-            ax.tick_params(axis='x',length=0,pad=3)
+                labels[2*i].set_weight('bold')
+                labels[2*i+1].set_weight('bold')
+            ax.tick_params(axis='x', length=0, pad=pad)
 
             ax.set(**ax_kwargs)
             ylim = ax.get_ylim()
@@ -201,12 +210,17 @@ def ISPhase(phase_times,dt=0.0001,isa=None):
     return phi, on_fraction
 
 
-def isISA(samples,isa,sleep):
-    # out: 0 ISA, 1 sleep nISA, 2 wake nISA
+def isISA(samples,isa,sleep=None):
+    # out: 0 ISA, 1 (sleep) nISA, 2 wake nISA (optional)
+
     _, is_isa = fma.general.restrict(samples,isa,s_ind=True)
-    _, is_sleep = fma.general.restrict(samples,sleep,s_ind=True)
-    out = np.full_like(is_isa,2,dtype=int)
-    out[is_sleep] = 1
+    out = np.full_like(is_isa,1,dtype=int)
+
+    if sleep is not None:
+        out *= 2
+        _, is_sleep = fma.general.restrict(samples,sleep,s_ind=True)
+        out[is_sleep] = 1
+
     out[is_isa] = 0
 
     return out
@@ -228,7 +242,24 @@ def isCoupled(times_a,times_b,windows):
     return is_coupled_a, is_coupled_b
 
 
-def loadHpcPfcEvents(session, names=None, regions=None, coupl=None, delta='all', isa=None):
+def loadHpcPfcEvents(session, names=None, regions=None, coupl=None, wait=None, delta='all', isa=None, sleep=None):
+    """load HPC ripples and PFC delta waves and spindles
+
+        arguments:
+            session       str
+            names         (:,) string = ['ripples','deltaWaves','spindles'], events to load
+            regions       regions object to compute PFC down states
+            coupl         bool = False, assess coupling between events
+            wait          float = 0 s, exclude uncoupled ripples which have a delta wave before 'wait' s after ripple peak
+            delta         str = 'all', specifies how to asses coupling of delta waves
+            isa           (:,2) = None, ISA intervals used to assess whether events fall in ISA
+            sleep         (:,2) = None, sleep intervals to define epochs outside ISA
+
+        output:
+            events        dict
+            is_coupled    dict
+            is_isa        dict
+        """
 
     names = ['ripples','deltaWaves','spindles'] if names is None else np.array(names,ndmin=1)
 
@@ -264,11 +295,17 @@ def loadHpcPfcEvents(session, names=None, regions=None, coupl=None, delta='all',
                 is_coupled['deltaWaves'] = is_coupled['deltas_spin']
             case _:
                 is_coupled['deltaWaves'] = is_coupled['deltas_rip'] & is_coupled['deltas_spin']
+        # keep ripples which have no delta in the following 'wait' s
+        if wait is not None:
+            remove, _ = isCoupled(events['ripples'],events['deltaWaves'],[0.,wait])
+            remove = remove & ~is_coupled['ripples']
+            events['ripples'] = events['ripples'][~remove]
+            is_coupled['ripples'] = is_coupled['ripples'][~remove]
         out = (events,is_coupled)
 
     # 3. assess ISA
     if isa is not None:
-        is_isa = {e: fma.general.restrict(events[e],isa,s_ind=True)[1] for e in events}
+        is_isa = {e: isISA(events[e],isa,sleep=sleep) for e in events}
         out = (*out,is_isa)
 
     return out if len(out) > 1 else out[0]
