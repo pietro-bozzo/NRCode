@@ -42,8 +42,10 @@ def paperColors(i,alpha='ff'):
               'rvhpc':         "#f4ce32", # 4bis. right ventral HPC
               'ldhpc':         "#f4ce32", # 4bis. left dorsal HPC
               'rdhpc':         "#f4ce32", # 4bis. right dorsal HPC
-              'deltawaves':    "#2f4b7c", # 11bis. deltas
-              'down':          "#2f4b7c", # 11tris. deltas
+              'deltawaves':    "#2f4b7c", # 11a. deltas
+              'down':          "#2f4b7c", # 11b. deltas
+              'deltas_rip':    "#2f4b7c", # 11c. deltas
+              'deltas_spin':   "#2f4b7c", # 11d. deltas
               }
     n_colors = len(colors)
     for j, key in enumerate(tuple(colors)):
@@ -65,12 +67,16 @@ def paperColors(i,alpha='ff'):
         return out
 
 
-def ISAxes(axs, double:bool=None, format='paper', **ax_kwargs):
+def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
+    """span: ON start to OFF end, for linear axis
+    double: if True, plot multiple cycles, for linear axis
+    """
 
     if isinstance(axs,mpla._axes.Axes):
         axs = [axs]
     elif isinstance(axs,np.ndarray):
         axs = axs.ravel()
+    span = np.array(span,ndmin=1) if span is not None else np.array([0,2*np.pi])
     if double is None: double = False
 
     on_color = '#444444'
@@ -92,7 +98,7 @@ def ISAxes(axs, double:bool=None, format='paper', **ax_kwargs):
             labels[5].set_color(off_color)
             labels[2].set_weight('bold')
             labels[5].set_weight('bold')
-            ax.tick_params(axis='x', pad=pad)
+            ax.tick_params(axis='x', pad=pad+3)
 
             gridlines = ax.xaxis.get_gridlines()
             for i in [0,1,3,4]:
@@ -113,7 +119,8 @@ def ISAxes(axs, double:bool=None, format='paper', **ax_kwargs):
         else:
             ax.spines['bottom'].set_visible(False)
 
-            x_ticks = np.arange(0,(double+1)*2*np.pi,np.pi) + np.pi/2
+            half_span = (span[-1] - span[0]) / 2
+            x_ticks = np.arange(span[0], span[-1]+(double*2*half_span), half_span) + half_span/2
             ax.set_xticks(x_ticks,['ON','OFF']*(double+1),fontsize=fs)
             labels = ax.get_xticklabels()
             for i in range(double+1):
@@ -125,11 +132,11 @@ def ISAxes(axs, double:bool=None, format='paper', **ax_kwargs):
 
             ax.set(**ax_kwargs)
             ylim = ax.get_ylim()
-            x_coord = [0,np.pi]
+            x_coord = [span[0],span[0]+half_span] # [0,np.pi]
             if double:
-                x_coord.extend([np.nan,2*np.pi,3*np.pi])
+                x_coord.extend([np.nan,span[-1],span[-1]+half_span])
             ax.plot(x_coord,np.full_like(x_coord,ylim[0]),lw=lw['cartesian'],color=on_color,clip_on=False)
-            ax.plot(np.array(x_coord)+np.pi,np.full_like(x_coord,ylim[0]),lw=lw['cartesian'],color=off_color,clip_on=False)
+            ax.plot(np.array(x_coord)+half_span,np.full_like(x_coord,ylim[0]),lw=lw['cartesian'],color=off_color,clip_on=False)
             ax.set_ylim(ylim)
 
     return
@@ -259,7 +266,7 @@ def loadHpcPfcEvents(session, names=None, regions=None, coupl=None, wait=None, d
             events        dict
             is_coupled    dict
             is_isa        dict
-        """
+    """
 
     names = ['ripples','deltaWaves','spindles'] if names is None else np.array(names,ndmin=1)
 
@@ -293,6 +300,8 @@ def loadHpcPfcEvents(session, names=None, regions=None, coupl=None, wait=None, d
                 is_coupled['deltaWaves'] = is_coupled['deltas_rip']
             case 'spindles':
                 is_coupled['deltaWaves'] = is_coupled['deltas_spin']
+            #case 'both':
+            #    is_coupled['deltaWaves'] = is_coupled['deltas_rip'] & is_coupled['deltas_spin']
             case _:
                 is_coupled['deltaWaves'] = is_coupled['deltas_rip'] & is_coupled['deltas_spin']
         # keep ripples which have no delta in the following 'wait' s
