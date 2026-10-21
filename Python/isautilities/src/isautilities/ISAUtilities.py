@@ -1,7 +1,11 @@
 import numpy as np
 import fmatoolbox as fma
 import matplotlib.axes as mpla
+import pathlib
+import pickle
 
+
+# plotting
 
 def paperColors(i,alpha='ff'):
     """get colors for Nucleus Reuniens Infra-Slow Avalanches paper
@@ -51,20 +55,39 @@ def paperColors(i,alpha='ff'):
     for j, key in enumerate(tuple(colors)):
         colors[j] = colors[key]
 
-    if isinstance(i,int):
+    if isinstance(i, int):
         return colors[i % n_colors] + alpha
-    elif isinstance(i,str):
+
+    elif isinstance(i, str):
         out = colors[i.lower()] if i.lower() in colors else colors['th']
         return out + alpha
+
     else:
         out = []
-        for j in i:
-            if isinstance(j,int):
-                out.append(colors[j % n_colors] + alpha)
+        if isinstance(alpha, str):
+            alpha = [alpha] * len(i)
+        for idx, j in enumerate(i):
+            if isinstance(j, int):
+                out.append(colors[j % n_colors] + alpha[idx])
             else:
                 o = colors[j.lower()] if j.lower() in colors else colors['th']
-                out.append(o + alpha)
+                out.append(o + alpha[idx])
         return out
+
+
+def axes(fig, left, top, width, height):
+    cm = 2.54 # inches to centimeter conversion factor
+    fw, fh = fig.get_size_inches() * cm
+    ax = fig.add_axes((left/fw, 1-(top+height)/fh, width/fw, height/fh))
+    fma.plotting.adjustAxes(ax)
+    return ax
+
+
+def pos(ax, fig):
+    cm = 2.54 # inches to centimeter conversion factor
+    fw, fh = fig.get_size_inches() * cm
+    left, bottom, width, heigth = ax.get_position().bounds
+    return np.array([left*fw, (1-bottom-heigth)*fh, width*fw, heigth*fh])
 
 
 def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
@@ -81,9 +104,9 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
 
     on_color = '#444444'
     off_color = '#c9a6f7'
-    lw = {'cartesian': 2, 'polar': 3} if format == 'paper' else {'cartesian': 3, 'polar': 5}
+    lw = {'cartesian': 1, 'polar': 2} if format == 'paper' else {'cartesian': 3, 'polar': 5}
     s = 80 if format == 'paper' else 150
-    fs = 11 if format == 'paper' else 16
+    fs = 9 if format == 'paper' else 16
     pad = 3 if format == 'paper' else 11
 
     for ax in axs:
@@ -142,6 +165,8 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     return
 
 
+# computation
+
 def ISCycles(isa,on,return_off=False):
 
     isa = np.array(isa,ndmin=2)
@@ -149,7 +174,7 @@ def ISCycles(isa,on,return_off=False):
     if isa.size == 0 or on.size == 0:
         return np.zeros((0,2)), np.zeros((0,2)) if return_off else np.zeros((0,2))
 
-    _, is_inside = fma.general.restrict(on[1:,0] - .0001, isa,s_ind=True) # is_inside[i] is False if on[i+1,0] cannot be used as end of a cycle (or OFF)
+    _, is_inside = fma.intervals.restrict(on[1:,0] - .0001, isa,s_ind=True) # is_inside[i] is False if on[i+1,0] cannot be used as end of a cycle (or OFF)
     is_inside = np.append(is_inside,False) # last element of cycles[:,1] (or off[:,1]) is always to change
 
     cycles = np.stack((on[:,0], np.roll(on[:,0],-1)), axis=1)
@@ -169,7 +194,7 @@ def ISTransitions(isa,on,min_duration=None):
     # min_duration: [min on duration, min off duration]
 
     # 1. OFF-ON transitions
-    _, valid = fma.general.restrict(on[:,0]-.0001,isa,s_ind=True)
+    _, valid = fma.intervals.restrict(on[:,0]-.0001,isa,s_ind=True)
     if min_duration is not None:
         valid_where = np.where(valid)[0]
         valid_for_off = (on[valid_where,0] - on[valid_where-1,1] > min_duration[1]) # duration of preceding OFF
@@ -178,7 +203,7 @@ def ISTransitions(isa,on,min_duration=None):
     off_on = on[valid,0]
 
     # 1. ON-OFF transitions
-    _, valid = fma.general.restrict(on[:,1]+.0001,isa,s_ind=True)
+    _, valid = fma.intervals.restrict(on[:,1]+.0001,isa,s_ind=True)
     if min_duration is not None:
         print('implement!') # WATCH OUT FOR ASSUMPTION THAT isa ENDS WITH ON
     on_off = on[valid,1]
@@ -209,7 +234,7 @@ def ISPhase(phase_times,dt=0.0001,isa=None):
 
     # restrict to ISA
     if isa is not None:
-        phi = fma.general.restrict(phi,isa)
+        phi = fma.intervals.restrict(phi,isa)
 
     # fraction of time spent in ON
     on_fraction = np.sum((phi[:,1] > range[0]) & (phi[:,1] < range.mean())) / len(phi)
@@ -220,12 +245,12 @@ def ISPhase(phase_times,dt=0.0001,isa=None):
 def isISA(samples,isa,sleep=None):
     # out: 0 ISA, 1 (sleep) nISA, 2 wake nISA (optional)
 
-    _, is_isa = fma.general.restrict(samples,isa,s_ind=True)
+    _, is_isa = fma.intervals.restrict(samples,isa,s_ind=True)
     out = np.full_like(is_isa,1,dtype=int)
 
     if sleep is not None:
         out *= 2
-        _, is_sleep = fma.general.restrict(samples,sleep,s_ind=True)
+        _, is_sleep = fma.intervals.restrict(samples,sleep,s_ind=True)
         out[is_sleep] = 1
 
     out[is_isa] = 0
@@ -324,8 +349,8 @@ def epochIndex(events,epochs,duration=None,nrem=None):
     # note: events outside nREM will have idx NaN when 'duration' is given
 
     if duration is not None:
-        nrem = fma.general.intersectIntervals((nrem,epochs))
-        _, nrem_epoch_idx = fma.general.restrict(nrem[:,0],epochs,i_ind=True)
+        nrem = fma.intervals.intersectIntervals((nrem,epochs))
+        _, nrem_epoch_idx = fma.intervals.restrict(nrem[:,0],epochs,i_ind=True)
 
         # cumulative nREM duration per epoch
         nrem_start = np.full(len(epochs),np.nan)
@@ -338,14 +363,37 @@ def epochIndex(events,epochs,duration=None,nrem=None):
     for event in events:
 
         # assign epoch indexes
-        events[event], epoch_idx[event] = fma.general.restrict(events[event],epochs,i_ind=True)
+        events[event], epoch_idx[event] = fma.intervals.restrict(events[event],epochs,i_ind=True)
         epoch_idx[event] += 1
 
         # shift to compute duration
         if duration is not None:
-            shifted, valid, nrem_idx = fma.general.restrict(events[event],nrem,shift=True,s_ind=True,i_ind=True)
+            shifted, valid, nrem_idx = fma.intervals.restrict(events[event],nrem,shift=True,s_ind=True,i_ind=True)
             epoch_idx[event][~valid] = np.nan
             shifted -= nrem_start[nrem_epoch_idx[nrem_idx]] # make shifted times relative to their epoch start
             epoch_idx[event][valid][shifted > duration] *= -1
 
     return events, epoch_idx
+
+
+# results management
+
+def load_results(file):
+    file = pathlib.Path(file)
+    if not file.exists():
+        return {}
+    with open(file, "rb") as f: results = pickle.load(f)
+    return results
+
+
+def save_results(results, file):
+    with open(file ,"wb") as f:
+        pickle.dump(results, f, protocol=pickle.HIGHEST_PROTOCOL)
+    return
+
+
+def update_results(results, file):
+    existing = load_results(file)
+    existing.update(results)
+    save_results(existing, file)
+    return
