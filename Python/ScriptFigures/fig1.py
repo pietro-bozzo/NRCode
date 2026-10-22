@@ -11,6 +11,7 @@ froot = pathlib.Path().cwd().parent.parent.parent / 'Results'
 res_root = froot / 'Data'
 output_file = froot / 'FinalFigures' / 'Fig1'
 LEFT = 0.7; TOP = 0.3
+axs = {}
 regs = ('nr','hpc','pfc')
 states = ('sws','rem','other')
 state_names = ('nREM','REM','wake')
@@ -20,6 +21,7 @@ results = isau.load_results(res_root / 'exampleISA.pkl')
 
 # example raster
 ax = isau.axes(fig, LEFT, TOP+0.5,7.3,5)
+axs['example'] = ax
 start = results['start']
 stop = results['stop']
 label = ('firing rate (Hz)', None, None)
@@ -72,6 +74,7 @@ for cb in reversed(cbs):
 # example zoomed
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig,left,top+height+1, width, 5)
+axs['example_zoom'] = ax
 start = results['start_zoom']
 stop = results['stop_zoom']
 start = 2070
@@ -101,7 +104,8 @@ left, top, width, height = isau.pos(ax, fig)
 ax = []
 for i in range(3):
     ax.append(isau.axes(fig, left+width+1, top+height/3*i, width, height/3))
-fr = results[f'fr_zoom_avg']
+    axs[f'example_fr{i}'] = ax[-1]
+fr = results['fr_zoom_avg']
 regs = ('pfc','hpc','nr')
 for i, r in enumerate(regs):
     ax[i].plot(fr[:,0], fr[:,i+1], color=isau.paperColors(r))
@@ -115,3 +119,4 @@ ax[-1].set(xlabel='time', xticks=np.arange(start,stop+1,20), xticklabels=[])
 
 fig.show()
 fma.plotting.saveFigure(fig, output_file, ['png','svg'])
+isau.save_axes_figs(axs, fig, output_file)

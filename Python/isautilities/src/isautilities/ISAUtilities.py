@@ -90,6 +90,23 @@ def pos(ax, fig):
     return np.array([left*fw, (1-bottom-heigth)*fh, width*fw, heigth*fh])
 
 
+def save_axes_figs(axs, fig, froot):
+    print('saving panels...')
+
+    froot = pathlib.Path(froot)
+    name = froot.name
+    froot = froot.parent / 'panels' / name
+    fig.canvas.draw()
+    transform = fig.dpi_scale_trans.inverted()
+
+    if not isinstance(axs, dict): axs = {i: ax for i, ax in enumerate(axs)}
+    for i, ax in axs.items():
+        for fmt in ('png','svg'):
+            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=200, pad_inches=0, format=fmt,
+            bbox_inches=ax.get_tightbbox().transformed(transform))
+    return
+
+
 def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     """span: ON start to OFF end, for linear axis
     double: if True, plot multiple cycles, for linear axis
@@ -161,6 +178,20 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
             ax.plot(x_coord,np.full_like(x_coord,ylim[0]),lw=lw['cartesian'],color=on_color,clip_on=False)
             ax.plot(np.array(x_coord)+half_span,np.full_like(x_coord,ylim[0]),lw=lw['cartesian'],color=off_color,clip_on=False)
             ax.set_ylim(ylim)
+
+    return
+
+
+def pair_violin(x, g, ax, dx=0.5, label=None, log=None, color=(None,None), vprop=({},{}), **kwargs):
+
+    boot = fma.statistics.hierarchicalBootstrap(x, g)
+    if log: boot = tuple(np.log(b[b>0]) for b in boot)
+    fma.plotting.boxPlot((boot[0],), x=0, mode='violin', side='low', color=color[0], **vprop[0], ax=ax)
+    fma.plotting.boxPlot((boot[1],), x=dx, mode='violin', color=color[1], **vprop[1], ax=ax)
+    ax.set(xlim=(-0.8,0.8+dx), xticks=(-0.3,0.3+dx), xticklabels=(label), **kwargs)
+
+    p = fma.statistics.hierarchicalBootstrapTest(x, g, paired=True)
+    fma.plotting.pBar([0,1,p], x=(-0.2,dx+0.2), ax=ax)
 
     return
 

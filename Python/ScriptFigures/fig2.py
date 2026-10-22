@@ -8,12 +8,14 @@ froot = pathlib.Path().cwd().parent.parent.parent / 'Results'
 res_root = froot / 'Data'
 output_file = froot / 'FinalFigures' / 'Fig2'
 LEFT = 0.7; TOP = 0.3
+axs = {}
 fig = fma.plotting.figure(n=0, size=(17.5,10.9))
 
 
 # ISA is exclusive to NR
 results = isau.load_results(res_root / 'detectISA.pkl')
 ax = isau.axes(fig, LEFT, TOP, 4, 3)
+axs['unique'] = ax
 labels = ['NR','TH','iHPC','vHPC','dHPC','PFC','V1','AMY']
 regs = results['regs']
 color = isau.paperColors([regs[i] for i in [0,0,2,2,2,5,5,7]], ['ff','90'] + ['ff']*(len(regs)-2))
@@ -29,6 +31,7 @@ ax.tick_params(axis='x', pad=4, rotation=45)
 results = isau.load_results(res_root / 'exampleISA.pkl')
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+0.4, top, 2.6, height)
+axs['cycle_ex'] = ax
 start = results['start_ex']; stop = results['stop_ex']
 spikes = results['spike_ex']
 fma.plotting.plotIntervals([[start,start+6.8], [stop-1.6,stop]], alpha=0.2)
@@ -41,6 +44,7 @@ ax.yaxis.labelpad = 0.7
 results = isau.load_results(res_root / 'regionStatusFiring.pkl')
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+1.2, top, 3.5, height)
+axs['cycle_avg'] = ax
 fr_on = results['fr_on']; fr_off = results['fr_off']
 for i, reg in enumerate(['nr']):
     x = np.concatenate((fr_on.phi,fr_off.phi))
@@ -56,6 +60,7 @@ isa, on, off, cycles = results['isa'], results['on'], results['off'], results['c
 
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+1.2, top, 3, height*0.4)
+axs['cycle_pdf'] = ax
 y = []
 for i, ra in enumerate(cycles):
     x, _y = fma.analysis.PDF(np.diff(cycles[ra]['nr']), bins=np.linspace(0,30,40))
@@ -65,6 +70,7 @@ ax.set(xlim=(0,30),xlabel='ISA cycle duration (s)',ylim=(ax.get_ylim()[0],0.1))#
 
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left, TOP+3-height, 3, height)
+axs['epoch_pdf'] = ax
 y = []
 for i, ra in enumerate(isa):
     x, _y = fma.analysis.PDF(np.diff(isa[ra]['nr']), bins=np.linspace(0,300,40))
@@ -79,6 +85,7 @@ ax.set_ylabel('                       normalized count',labelpad=3)
 # % of states spent in ISA
 results = isau.load_results(res_root / 'ISAStates.pkl')
 ax = isau.axes(fig, LEFT+0.2, TOP+4, 2.1, 2.3)
+axs['states_inv'] = ax
 states, f = results['states'], results['fraction'].sel(val='reverse')
 b = fma.statistics.hierarchicalBootstrap(tuple(f.sel(state=s)*100 for s in states), tuple(f.rat for s in states))
 p = fma.statistics.hierarchicalBootstrapTest(tuple(f.sel(state=s) for s in states), tuple(f.rat for s in states), paired=True)
@@ -92,6 +99,7 @@ ax.tick_params(axis='x', pad=10)
 # % of ISA spent in states
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+1.2, top, height, height)
+axs['states'] = ax
 for i, state in enumerate(states):
     fd = results['fraction'].sel(state=state)
     ax.scatter(fd.sel(val='ref')*100, fd.sel(val='isa')*100, s=20, alpha=0.5, color=isau.paperColors(state))
@@ -103,6 +111,7 @@ ax.set(xlabel='time spent in state (%)', xlim=(ax.get_xlim()[0],80), xticks=(0,4
 # nREM interval duration
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+1.3, top, 2.5, height)
+axs['nrem_dur'] = ax
 f = results['duration']['sws']
 fma.plotting.semPlot(f.dur/60, f*100, color=isau.paperColors('sws'), ci='nansem')
 stat = fma.analysis.clusterPermutationTest(f*100,50)
@@ -115,12 +124,14 @@ ax.set(xlabel='nREM interval duration (min)', ylabel='time spent in ISA (%)', xl
 f = results['interval'].sel(state='sws')
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+0.85, top, 1, height)
+axs['nrem_elapsed0'] = ax
 fma.plotting.semPlot(f.win, f.sel(val='start')*100, color=isau.paperColors('sws'))
 ax.axvline(50, ls='--', lw=0.6, color='k')
 ax.set(xlabel='                  elapsed nREM time (s)', xlim=(ax.get_xlim()[0],50), ylim=(0,60))
 
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+0.2, top, 1, height)
+axs['nrem_elapsed1'] = ax
 fma.plotting.semPlot(f.win,f.sel(val='stop')*100,color=isau.paperColors('sws'))
 ax.axvline(0, ls='--', lw=0.6, color='k')
 ax.set(xlim=(0, ax.get_xlim()[1]), xticks=(0,50), xticklabels=(-50,0), ylim=(0,60), yticks=())
@@ -130,6 +141,7 @@ ax.spines['left'].set_visible(False)
 # concatenated nREM
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+0.85, top, 2.5, height)
+axs['nrem_concat'] = ax
 f = results['shifted'].sel(state='sws')
 fma.plotting.semPlot(f.win/60, f*100, color=isau.paperColors('sws'), ci='nansem')
 stat = fma.analysis.clusterPermutationTest(f*100,57)
@@ -144,6 +156,7 @@ ax.set(xlabel='concatenated nREM time (min)', xlim=(ax.get_xlim()[0],80))
 results = isau.load_results(res_root / 'unitEntrainment.pkl')
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, LEFT, top+height+1, 2.5, 2.5)
+axs['unit_colormap'] = ax
 tc = results['tc'].sel(reg='nr')
 kur = results['kur'].sel(reg='nr',val='psi')
 
@@ -168,6 +181,7 @@ ax.set(ylabel='units'); isau.ISAxes(ax)
 # preferred phase
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+1.3, top, 2.8, height)
+axs['status'] = ax
 psi = np.mod(kur, 2*np.pi)
 y = []
 for rat in np.unique(psi.rat):
@@ -181,6 +195,7 @@ isau.ISAxes(ax, double=True)
 # prefer ON / OFF proportions
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+1.1, top, 0.8, height)
+axs['on_pref'] = ax
 import statsmodels.stats.proportion as smsp
 limits = [[-1,10], [np.pi/4,3*np.pi/4], [5*np.pi/4,7*np.pi/4]]
 alpha = ('e0','70')
@@ -204,6 +219,7 @@ results = isau.load_results(res_root / 'criticalExponents.pkl')
 left, top, width, height = isau.pos(ax, fig)
 new_height = 0.85 * height / 2
 ax = [isau.axes(fig, left+width+1.1, top, 2.8, new_height)]
+for n, a in zip(('aval_S','aval_D'), ax): axs[n] = a
 ax.append(isau.axes(fig, left+width+1.1, top+height-new_height, 2.8, new_height))
 
 # S, D
@@ -231,6 +247,7 @@ for j, r in enumerate(pdf[session][s]):
 exponents = results['exp_states']
 left, top, width, _ = isau.pos(ax[0], fig)
 ax = isau.axes(fig, left+width+1.1, top, width, height)
+axs['dcc'] = ax
 dcc = []; #label = []
 for i, r in enumerate(regs):
     valid = np.all(~np.isnan(fit.sel(reg=r,state='sws',val='p')), axis=1) # sessions where a fit was performed
@@ -255,3 +272,4 @@ ax.set(xlim=(-0.5,2.5), ylabel='DCC', ylim=(0,0.55))
 
 fig.show()
 fma.plotting.saveFigure(fig, output_file, ['png','svg'])
+isau.save_axes_figs(axs, fig, output_file)
