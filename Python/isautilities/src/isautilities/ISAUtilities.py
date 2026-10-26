@@ -1,6 +1,9 @@
 import numpy as np
 import fmatoolbox as fma
 import matplotlib.axes as mpla
+import matplotlib.lines
+import matplotlib.patches
+import matplotlib.transforms
 import pathlib
 import pickle
 
@@ -21,13 +24,14 @@ def paperColors(i,alpha='ff'):
     # IBM colorblind safe palette
     # colors = ["#648fff","#ffb000","#dc267f","#785ef0","#fe6100"]
 
-    colors = {'hpc':           '#87b69e', # 1. HPC
-              'nr':            '#a076b9', # 2. NR
-              'pfc':           "#fc7860", # 3. PFC
-              'th':            "#f4ce32", # 4. TH
-              'sws':           "#ecc8e3", # 5. nREM
-              'rem':           "#a8c7ec", # 6. REM
-              'wake':          "#fff3b6", # 7. wake
+    colors = {'hpc':           "#87b69e", # 1. HPC
+              'nr':            '#B886D6', # 2. NR, was "#a076b9"
+              'pfc':           "#246DC6", # 3. PFC, was "#fc7860"
+              'th':            "#E6C7F9", # 4. TH
+              'sws':           "#E83B7B", # 5. nREM, was "#ecc8e3"
+              'rem':           "#FF9480", # 6. REM, was "#FC7860"
+              'wake':          "#F4CE32", # 7. wake
+              'other':         "#F4CE32", # 7. wake
               'on':            "#d8e9bc", # 8. NR "up state"
               'off':           "#bee5eb", # 9. NR "down state"
               'ripples':       "#498a4e", # 10. ripples, was "#1f99a3"
@@ -90,6 +94,37 @@ def pos(ax, fig):
     return np.array([left*fw, (1-bottom-heigth)*fh, width*fw, heigth*fh])
 
 
+def text(fig, left, top, text, **kwargs):
+    cm = 2.54 # inches to centimeter conversion factor
+    _, fh = fig.get_size_inches() * cm
+    bottom = fh - top
+    cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
+    fig.text(left, bottom, text, transform=cm, **kwargs)
+    return
+
+
+def line(fig, x, y, **kwargs):
+    cm = 2.54  # inches to centimeter conversion factor
+    _, fh = fig.get_size_inches() * cm
+    y = [fh - _y for _y in y]
+    cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
+    line = matplotlib.lines.Line2D(x, y, transform=cm, **kwargs)
+    fig.add_artist(line)
+    return
+
+
+def rectangle(fig, left, top, width, height, text=None, **kwargs):
+    cm = 2.54 # inches to centimeter conversion factor
+    _, fh = fig.get_size_inches() * cm
+    bottom = fh - top - height
+    cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
+    rect = matplotlib.patches.Rectangle((left, bottom), width, height, transform=cm, **kwargs)
+    fig.add_artist(rect)
+    if text is not None:
+        fig.text(left+width/2, bottom+height/2, text, fontsize=7, transform=cm, ha='center', va='center_baseline')
+    return
+
+
 def save_axes_figs(axs, fig, froot):
     print('saving panels...')
 
@@ -102,7 +137,7 @@ def save_axes_figs(axs, fig, froot):
     if not isinstance(axs, dict): axs = {i: ax for i, ax in enumerate(axs)}
     for i, ax in axs.items():
         for fmt in ('png','svg'):
-            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=200, pad_inches=0, format=fmt,
+            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=300, pad_inches=0, format=fmt,
             bbox_inches=ax.get_tightbbox().transformed(transform))
     return
 
@@ -182,16 +217,24 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     return
 
 
-def pair_violin(x, g, ax, dx=0.5, label=None, log=None, color=(None,None), vprop=({},{}), **kwargs):
+def pair_violin(x, g, ax, mode='pair', dx=0.3, label=None, log=None, color=(None,None), vprop=({},{}), **kwargs):
 
     boot = fma.statistics.hierarchicalBootstrap(x, g)
     if log: boot = tuple(np.log(b[b>0]) for b in boot)
     fma.plotting.boxPlot((boot[0],), x=0, mode='violin', side='low', color=color[0], **vprop[0], ax=ax)
     fma.plotting.boxPlot((boot[1],), x=dx, mode='violin', color=color[1], **vprop[1], ax=ax)
     ax.set(xlim=(-0.8,0.8+dx), xticks=(-0.3,0.3+dx), xticklabels=(label), **kwargs)
+    ax.tick_params(axis='x', pad=10, labelsize=7)
 
-    p = fma.statistics.hierarchicalBootstrapTest(x, g, paired=True)
-    fma.plotting.pBar([0,1,p], x=(-0.2,dx+0.2), ax=ax)
+    if mode == 'zero':
+        p = [fma.statistics.hierarchicalBootstrapTest(x[i], g[i]) for i in range(len(x))]
+        fma.plotting.pBar([[0,0,p[0]],[1,1,p[1]]], x=(-0.2,dx+0.2), ax=ax)
+    elif mode == 'diff':
+        p = fma.statistics.hierarchicalBootstrapTest(x[0]-x[1], g[0])
+        fma.plotting.pBar([0,1,p], x=(-0.2,dx+0.2), ax=ax)
+    else:
+        p = fma.statistics.hierarchicalBootstrapTest(x, g, paired=True)
+        fma.plotting.pBar([0,1,p], x=(-0.2,dx+0.2), ax=ax)
 
     return
 

@@ -9,6 +9,7 @@ res_root = froot / 'Data'
 output_file = froot / 'FinalFigures' / 'Fig2'
 LEFT = 0.7; TOP = 0.3
 axs = {}
+SAVE_PANELS = True
 fig = fma.plotting.figure(n=0, size=(17.5,10.9))
 
 
@@ -16,13 +17,12 @@ fig = fma.plotting.figure(n=0, size=(17.5,10.9))
 results = isau.load_results(res_root / 'detectISA.pkl')
 ax = isau.axes(fig, LEFT, TOP, 4, 3)
 axs['unique'] = ax
-labels = ['NR','TH','iHPC','vHPC','dHPC','PFC','V1','AMY']
-regs = results['regs']
-color = isau.paperColors([regs[i] for i in [0,0,2,2,2,5,5,7]], ['ff','90'] + ['ff']*(len(regs)-2))
-b = results['ISA_fraction']
-p = results['p_val']
-fma.plotting.boxPlot(b, mode='violin', color=color, widths=1, label=labels)
-fma.plotting.pBar(p[["Condition 2","Condition 2","Corrected p-value"]], x=range(len(regs)))
+labels = ['NR','TH','iHPC','vHPC','dHPC','PFC','AMY']
+regs = results['regs']; b = results['ISA_fraction']; p = results['p_val']
+color = isau.paperColors([regs[i] for i in [0,0,2,2,2,5,6]], ['ff','90'] + ['ff']*(len(regs)-2))
+b.pop(-2); p.drop(p.index[-1], inplace=True) # remove V1
+fma.plotting.boxPlot(b, mode='violin', color=color, label=labels)
+fma.plotting.pBar(p[["Condition 2","Condition 2","Corrected p-value"]], x=list(range(len(regs)-2)) + [len(regs)-1,len(regs)-2])
 ax.set(ylabel='ISA time (%)', ylim=(0,40))
 ax.tick_params(axis='x', pad=4, rotation=45)
 
@@ -30,7 +30,7 @@ ax.tick_params(axis='x', pad=4, rotation=45)
 # example cycle
 results = isau.load_results(res_root / 'exampleISA.pkl')
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+0.4, top, 2.6, height)
+ax = isau.axes(fig, left+width+0.4, top, 3.2, height)
 axs['cycle_ex'] = ax
 start = results['start_ex']; stop = results['stop_ex']
 spikes = results['spike_ex']
@@ -43,7 +43,7 @@ ax.yaxis.labelpad = 0.7
 # typical cycle
 results = isau.load_results(res_root / 'regionStatusFiring.pkl')
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+1.2, top, 3.5, height)
+ax = isau.axes(fig, left+width+1.2, top, 2.8, height)
 axs['cycle_avg'] = ax
 fr_on = results['fr_on']; fr_off = results['fr_off']
 for i, reg in enumerate(['nr']):
@@ -84,7 +84,7 @@ ax.set_ylabel('                       normalized count',labelpad=3)
 
 # % of states spent in ISA
 results = isau.load_results(res_root / 'ISAStates.pkl')
-ax = isau.axes(fig, LEFT+0.2, TOP+4, 2.1, 2.3)
+ax = isau.axes(fig, LEFT, TOP+4, 2.1, 2.3)
 axs['states_inv'] = ax
 states, f = results['states'], results['fraction'].sel(val='reverse')
 b = fma.statistics.hierarchicalBootstrap(tuple(f.sel(state=s)*100 for s in states), tuple(f.rat for s in states))
@@ -98,19 +98,30 @@ ax.tick_params(axis='x', pad=10)
 
 # % of ISA spent in states
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+1.2, top, height, height)
+rect_space = 0.5; rect_dim = 0.3
+ax = isau.axes(fig, left+width+1.2, top+rect_space, height-rect_space, height-rect_space)
+left, _, width, _ = isau.pos(ax, fig)
 axs['states'] = ax
+medians = []
 for i, state in enumerate(states):
     fd = results['fraction'].sel(state=state)
-    ax.scatter(fd.sel(val='ref')*100, fd.sel(val='isa')*100, s=20, alpha=0.5, color=isau.paperColors(state))
-ax.plot(ax.get_xlim(), ax.get_ylim(), color='gray', ls='--', label='1:1', zorder=-1)
+    medians.append([np.nanmedian(fd.sel(val='ref') * 100), np.nanmedian(fd.sel(val='isa') * 100)])
+    ax.scatter(fd.sel(val='ref')*100, fd.sel(val='isa')*100, s=20, alpha=0.5, color=isau.paperColors(state), edgecolor='none')
+ax.plot(ax.get_xlim(), ax.get_ylim(), color='gray', ls='--', lw=0.5, zorder=-1)
 ax.set(xlabel='time spent in state (%)', xlim=(ax.get_xlim()[0],80), xticks=(0,40,80),
        ylabel='ISA time spent in state (%)', ylim=(ax.get_ylim()[0],105), yticks=(0,50,100))
-
+widths = [0,0]
+for i, state in enumerate(states):
+    m1, m2 = medians[i]
+    isau.rectangle(fig, left+widths[0], top, width*m1/100, rect_dim, ec=isau.paperColors(state),
+                   fc=isau.paperColors(state,'70'), lw=0.5, text=f'{m1:.0f}')
+    isau.rectangle(fig, left+width+rect_space-rect_dim, top+rect_space+widths[1], rect_dim, width*m2/100, ec=isau.paperColors(state),
+                   fc=isau.paperColors(state,'70'), lw=0.5, text=f'{m2:.0f}')
+    widths[0] += width*m1/100; widths[1] += width*m2/100
 
 # nREM interval duration
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+1.3, top, 2.5, height)
+ax = isau.axes(fig, left+width+1.7, top-rect_space, 2.5, height+rect_space)
 axs['nrem_dur'] = ax
 f = results['duration']['sws']
 fma.plotting.semPlot(f.dur/60, f*100, color=isau.paperColors('sws'), ci='nansem')
@@ -123,24 +134,31 @@ ax.set(xlabel='nREM interval duration (min)', ylabel='time spent in ISA (%)', xl
 # nREM interval dynamics
 f = results['interval'].sel(state='sws')
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+0.85, top, 1, height)
+rect_space = 0.5; rect_dim = 0.3
+ax = isau.axes(fig, left+width+0.85, top+rect_space, 1, height-rect_space)
 axs['nrem_elapsed0'] = ax
 fma.plotting.semPlot(f.win, f.sel(val='start')*100, color=isau.paperColors('sws'))
 ax.axvline(50, ls='--', lw=0.6, color='k')
-ax.set(xlabel='                  elapsed nREM time (s)', xlim=(ax.get_xlim()[0],50), ylim=(0,60))
+ax.set(xlabel='                  elapsed nREM time (s)', xlim=(ax.get_xlim()[0],50), xticks=(0,50),
+       xticklabels=(0,'50    '), ylim=(0,60))
 
 left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig, left+width+0.2, top, 1, height)
 axs['nrem_elapsed1'] = ax
 fma.plotting.semPlot(f.win,f.sel(val='stop')*100,color=isau.paperColors('sws'))
 ax.axvline(0, ls='--', lw=0.6, color='k')
-ax.set(xlim=(0, ax.get_xlim()[1]), xticks=(0,50), xticklabels=(-50,0), ylim=(0,60), yticks=())
+ax.set(xlim=(0, ax.get_xlim()[1]), xticks=(0,50), xticklabels=('    -50',0), ylim=(0,60), yticks=())
 ax.spines['left'].set_visible(False)
+
+cumw = 0
+for w, c, t in zip((0.2,0.6,0.2), isau.paperColors(('shuffle','nr','shuffle')), (None,'ISA',None)):
+    isau.rectangle(fig, left+cumw, top-rect_space, (2*width+0.2)*w, rect_dim, ec=c, fc=c[:-2]+'70', lw=0.5, text=t)
+    cumw += (2*width+0.2)*w
 
 
 # concatenated nREM
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+0.85, top, 2.5, height)
+ax = isau.axes(fig, left+width+0.85, top-rect_space, 2.5, height+rect_space)
 axs['nrem_concat'] = ax
 f = results['shifted'].sel(state='sws')
 fma.plotting.semPlot(f.win/60, f*100, color=isau.paperColors('sws'), ci='nansem')
@@ -171,7 +189,12 @@ order = np.argsort(kur.isel(reg=~signif)).values
 data_nsignif = data_nsignif[order]
 data = np.concatenate((np.full((200,tc.shape[1]),np.nan), data_nsignif, np.full((200,tc.shape[1]),np.nan), data_signif))
 
-fma.plotting.plotColorMap(data, aspect='auto', x=tc.phi, vmin=-1, vmax=1, zscore='all')
+_, cb = fma.plotting.plotColorMap(data, aspect='preserve', x=tc.phi, vmin=-1, vmax=1, bar='tuning curve (z-score)', zscore='all')
+cb.ax.set_box_aspect(None)
+bb = ax.get_position()
+dy = 0.03
+cb.ax.set_position([bb.xmax+0.01, bb.ymin+dy, 0.005, bb.height-2*dy])
+
 ax.plot([6.6]*2, [200,200+n_units[0]], isau.paperColors('shuffle'), [6.6]*2, [400+n_units[0],400+sum(n_units)], isau.paperColors('nr'), lw=2)
 ax.spines['left'].set_visible(False)
 ax.set_yticks([200+n_units[0]/2,400+n_units[0]+n_units[1]/2], labels=n_units, rotation=90, va='center')
@@ -180,7 +203,7 @@ ax.set(ylabel='units'); isau.ISAxes(ax)
 
 # preferred phase
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+1.3, top, 2.8, height)
+ax = isau.axes(fig, left+width+2.5, top, 2.8, height)
 axs['status'] = ax
 psi = np.mod(kur, 2*np.pi)
 y = []
@@ -194,7 +217,7 @@ isau.ISAxes(ax, double=True)
 
 # prefer ON / OFF proportions
 left, top, width, height = isau.pos(ax, fig)
-ax = isau.axes(fig, left+width+1.1, top, 0.8, height)
+ax = isau.axes(fig, left+width+0.8, top, 0.8, height)
 axs['on_pref'] = ax
 import statsmodels.stats.proportion as smsp
 limits = [[-1,10], [np.pi/4,3*np.pi/4], [5*np.pi/4,7*np.pi/4]]
@@ -218,18 +241,17 @@ ax.set_xticks(range(2), labels=('all','ON'), fontsize=7)
 results = isau.load_results(res_root / 'criticalExponents.pkl')
 left, top, width, height = isau.pos(ax, fig)
 new_height = 0.85 * height / 2
-ax = [isau.axes(fig, left+width+1.1, top, 2.8, new_height)]
+ax = [isau.axes(fig, left+width+1.1, top, 2.3, new_height)]
 for n, a in zip(('aval_S','aval_D'), ax): axs[n] = a
-ax.append(isau.axes(fig, left+width+1.1, top+height-new_height, 2.8, new_height))
+ax.append(isau.axes(fig, left+width+1.1, top+height-new_height, 2.3, new_height))
 
 # S, D
 # FIND EXAMPLE WITH BEST range diff: 2? 7? 18? 22?
-fit = results['fit_states']
-pdf = results['pdf_states']
+fit = results['fit_states']; pdf = results['pdf_states']
 def plotPowerLaw(pdf, fit, ax, name=None, label=None, **kwargs):
     fma.plotting.plotXY(pdf, label=label, ax=ax, lw=1, **kwargs)
-    ax.axvline(fit.sel(val='xmin'), ls='--', lw=0.8, **kwargs)
-    ax.axvline(fit.sel(val='xmax'), ls='--', lw=0.8, **kwargs)
+    ax.axvline(fit.sel(val='xmin'), ls='--', lw=0.5, **kwargs)
+    ax.axvline(fit.sel(val='xmax'), ls='--', lw=0.5, **kwargs)
     ax.set(xscale='log', yscale='log')
     if name is not None:
         ax.set(xlabel=name, ylabel=f'p({name})')
@@ -272,4 +294,4 @@ ax.set(xlim=(-0.5,2.5), ylabel='DCC', ylim=(0,0.55))
 
 fig.show()
 fma.plotting.saveFigure(fig, output_file, ['png','svg'])
-isau.save_axes_figs(axs, fig, output_file)
+SAVE_PANELS and isau.save_axes_figs(axs, fig, output_file)

@@ -2,8 +2,6 @@ import numpy as np
 import fmatoolbox as fma
 import isautilities as isau
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import Rectangle
-from matplotlib.transforms import Affine2D
 import pathlib
 
 # parameters
@@ -34,9 +32,8 @@ for i, r in enumerate(regs):
     t = fr[:,0]
     fr = fr[:,1:]
     n.append([n[-1][1], n[-1][1] + n_units])
-    im, cb = fma.plotting.plotColorMap(fr.T, x=t, y=n[-1], vmin=0, vmax=2, cmap=LinearSegmentedColormap.from_list(name=r,colors=['white',isau.paperColors(r)]),
+    _, cb = fma.plotting.plotColorMap(fr.T, x=t, y=n[-1], vmin=0, vmax=2, cmap=LinearSegmentedColormap.from_list(name=r,colors=['white',isau.paperColors(r)]),
                                        bar={'label':label[i], 'ticks':ticks[i], 'orientation':'horizontal'}, interpolation='none', aspect='preserve')
-    cb.outline.set_linewidth(0.3)
     cb.ax.xaxis.set_ticks_position('top')
     cb.ax.xaxis.set_label_position('top')
     cbs.append(cb)
@@ -51,28 +48,28 @@ for i in range(len(ticks)):
     if i % 2: ticks[i].tick1line.set_visible(False)
 
 # states
-height = 0.3; width = 0.8; top = 15 - TOP - height; delta = width + 0.4
+height = 0.3; width = 0.9; top = TOP; delta = width + 0.2
 for i, state in enumerate(states):
     fma.plotting.plotIntervals(results[f'{state}_interval'].astype(int), ymin=(n[-1][1]+0.5)/(n[-1][1]+11), color=isau.paperColors(state), alpha=0.7)
-    cm = Affine2D().scale(1/2.54) + fig.dpi_scale_trans
-    rect = Rectangle((LEFT+delta*i,top), width, height, transform=cm, facecolor=isau.paperColors(state), alpha=0.7)
-    fig.add_artist(rect)
-    fig.text(LEFT+0.1+delta*i, top, state_names[i], fontsize=7, transform=cm, va='bottom')
+    isau.rectangle(fig, LEFT+delta*i, top, width, height, facecolor=isau.paperColors(state), alpha=0.7, text=state_names[i])
 
 # color bars
 bb = ax.get_position()
 width = bb.width / 2
-dy = 0.004 # dx = 0.005
+dy = 0.004
 y = bb.ymax + dy + 0.001
 for cb in reversed(cbs):
-    cb.ax.set_position([bb.xmax-width, y, width, dy]) # cb.ax.set_position([x, bb.ymin, dx, bb.height/2])
+    cb.ax.set_position([bb.xmax-width, y, width, dy])
     cb.ax.set_box_aspect(None)
-    cb.ax.tick_params(width=0.3, labelsize=5, pad=0.1, length=1.5)
-    y += dy # x += dx
+    y += dy
+
+# time scale
+left, top, width, height = isau.pos(ax, fig)
+isau.line(fig, [left+width*4/5,left+width], [top+height+0.15,top+height+0.15], color='k', lw=0.5)
+isau.text(fig, left+width*4.5/5, top+height+0.2, '500 s', fontsize=4, ha='center', va='top')
 
 
 # example zoomed
-left, top, width, height = isau.pos(ax, fig)
 ax = isau.axes(fig,left,top+height+1, width, 5)
 axs['example_zoom'] = ax
 start = results['start_zoom']
@@ -86,7 +83,7 @@ for i, r in enumerate(['nr','hpc','pfc']):
     t = fr[:,0]
     fr = fr[:,1:]
     n.append([n[-1][1], n[-1][1] + n_units])
-    im = fma.plotting.plotColorMap(fr.T, x=t, y=n[-1], vmin=0, vmax=.0001, cmap=LinearSegmentedColormap.from_list(name=r,colors=['white',isau.paperColors(r)]),
+    fma.plotting.plotColorMap(fr.T, x=t, y=n[-1], vmin=0, vmax=.0001, cmap=LinearSegmentedColormap.from_list(name=r,colors=['white',isau.paperColors(r)]),
                                    interpolation='none', aspect='auto')
 n = np.array(n)[1:]
 ax.set(xlabel='time', xlim=(start,stop), xticks=np.arange(start,stop+1,20), xticklabels=[], ylim=(0,n[-1][1]), ylabel='units')
@@ -98,9 +95,13 @@ for i in range(len(ticks)):
     ticks_labels[i].set_color(isau.paperColors(regs[i//2]) if i % 2 else 'none')
     if i % 2: ticks[i].tick1line.set_visible(False)
 
+# timescale
+left, top, width, height = isau.pos(ax, fig)
+isau.line(fig, [left+width*8/9,left+width], [top+height+0.15,top+height+0.15], color='k', lw=0.5)
+isau.text(fig, left+width*8.5/9, top+height+0.2, '20 s', fontsize=4, ha='center', va='top')
+
 
 # example zoomed firing rates CHANGE AXES WITH SCALE BARS (NatNeuro Delta induction)
-left, top, width, height = isau.pos(ax, fig)
 ax = []
 for i in range(3):
     ax.append(isau.axes(fig, left+width+1, top+height/3*i, width, height/3))
@@ -116,6 +117,10 @@ ax[-1].yaxis.tick_right(); ax[-1].set(yticks=(0,2.5,5))
 ax[-1].spines['right'].set_visible(True); ax[-1].spines["right"].set_position(("outward",5))
 ax[-1].set(xlabel='time', xticks=np.arange(start,stop+1,20), xticklabels=[])
 
+# timescale
+left, top, width, height = isau.pos(ax[-1], fig)
+isau.line(fig, [left+width*8/9,left+width], [top+height+0.15,top+height+0.15], color='k', lw=0.5)
+isau.text(fig, left+width*8.5/9, top+height+0.2, '20 s', fontsize=4, ha='center', va='top')
 
 fig.show()
 fma.plotting.saveFigure(fig, output_file, ['png','svg'])

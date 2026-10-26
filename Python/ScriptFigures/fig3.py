@@ -1,7 +1,6 @@
 import fmatoolbox as fma
 import isautilities as isau
 import pathlib
-import matplotlib.ticker
 
 # parameters
 froot = pathlib.Path().cwd().parent.parent.parent / 'Results'
@@ -74,11 +73,8 @@ for i, e in enumerate(events):
     tc = rate.sel(event=e, epoch='sleep0', coupl=True)
     isau.pair_violin(tuple(tc.sel(isa=a) for a in [True,False]), (tc.rat,)*2, color=isau.paperColors((e,'shuffle')), label=('ISA','nISA'),
                      ax=ax[i], ylim=ylim[i], yticks=yticks[i])
-    formatter = matplotlib.ticker.ScalarFormatter(useMathText=True)
-    formatter.set_scientific(True)
-    formatter.set_powerlimits((-1,-1))
-    ax[i].yaxis.set_major_formatter(formatter)
-    ax[i].yaxis.get_offset_text().set_fontsize(4)
+    ax[i].ticklabel_format(axis='y',style='sci',scilimits=(-1,-1),useMathText=True)
+    ax[i].yaxis.get_offset_text().set_fontsize(5)
 ax[0].set(ylabel='rate of coupled events (Hz)')
 
 
