@@ -87,7 +87,8 @@ def axes(fig, left, top, width, height):
     return ax
 
 
-def pos(ax, fig):
+def pos(ax):
+    fig = ax.figure
     cm = 2.54 # inches to centimeter conversion factor
     fw, fh = fig.get_size_inches() * cm
     left, bottom, width, heigth = ax.get_position().bounds
@@ -130,6 +131,16 @@ def rectangle(ax, left, top, width, height, text=None, **kwargs):
     return rect
 
 
+def cm_box_to_inches(fig, left, top, width, height):
+    """(left, top, width, height) in cm from the figure's top-left
+    -> Bbox in inches from the figure's bottom-left (what ``bbox_inches`` expects)"""
+    cm = 2.54
+    _, fh = fig.get_size_inches() * cm
+    x0 = left / cm
+    y0 = (fh - top - height) / cm
+    return Bbox.from_extents(x0, y0, x0 + width / cm, y0 + height / cm)
+
+
 def save_axes_figs(axs, fig, froot):
     print('saving panels...')
 
@@ -140,10 +151,15 @@ def save_axes_figs(axs, fig, froot):
     transform = fig.dpi_scale_trans.inverted()
 
     if not isinstance(axs, dict): axs = {i: ax for i, ax in enumerate(axs)}
-    for i, ax in axs.items():
+    for i, entry in axs.items():
+        if isinstance(entry, tuple): # (ax, (left, top, width, height))
+            ax, bbox = entry
+            bbox = cm_box_to_inches(ax.figure, *bbox)
+        else: # plain ax -> automatic tight bbox
+            ax = entry
+            bbox = ax.get_tightbbox().transformed(transform)
         for fmt in ('png','svg'):
-            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=300, format=fmt,
-            bbox_inches=ax.get_tightbbox().transformed(transform))
+            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=300, format=fmt, bbox_inches=bbox)
     return
 
 
