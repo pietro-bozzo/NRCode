@@ -20,8 +20,7 @@ results = isau.load_results(res_root / 'exampleISA.pkl')
 # example raster
 ax = isau.axes(fig, LEFT, TOP+0.5,7.3,5)
 axs['example'] = ax
-start = results['start']
-stop = results['stop']
+start = results['start']; stop = results['stop']
 label = ('firing rate (Hz)', None, None)
 ticks = ([0,1,2], [], [])
 n = [[0,0]]

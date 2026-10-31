@@ -113,16 +113,21 @@ def line(fig, x, y, **kwargs):
     return
 
 
-def rectangle(fig, left, top, width, height, text=None, **kwargs):
+def rectangle(ax, left, top, width, height, text=None, **kwargs):
+    fig = ax.figure
     cm = 2.54 # inches to centimeter conversion factor
-    _, fh = fig.get_size_inches() * cm
+    fw, fh = fig.get_size_inches() * cm
     bottom = fh - top - height
-    cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
-    rect = matplotlib.patches.Rectangle((left, bottom), width, height, transform=cm, **kwargs)
-    fig.add_artist(rect)
+    # cm -> figure fraction -> display; follows the savefig crop
+    trans = matplotlib.transforms.Affine2D().scale(1/fw, 1/fh) + fig.transFigure
+    #cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
+    rect = matplotlib.patches.Rectangle((left, bottom), width, height, transform=trans, **kwargs)
+    ax.add_artist(rect)
+    rect.set_clip_on(False) # add_artist sets the axes patch as clip path
     if text is not None:
-        fig.text(left+width/2, bottom+height/2, text, fontsize=7, transform=cm, ha='center', va='center_baseline')
-    return
+        txt = ax.text(left+width/2, bottom+height/2, text, fontsize=7, transform=trans, ha='center', va='center_baseline', clip_on=False)
+        return rect, txt
+    return rect
 
 
 def save_axes_figs(axs, fig, froot):
@@ -137,7 +142,7 @@ def save_axes_figs(axs, fig, froot):
     if not isinstance(axs, dict): axs = {i: ax for i, ax in enumerate(axs)}
     for i, ax in axs.items():
         for fmt in ('png','svg'):
-            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=300, pad_inches=0, format=fmt,
+            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=300, format=fmt,
             bbox_inches=ax.get_tightbbox().transformed(transform))
     return
 

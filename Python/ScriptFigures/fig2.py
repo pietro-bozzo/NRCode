@@ -113,9 +113,9 @@ ax.set(xlabel='time spent in state (%)', xlim=(ax.get_xlim()[0],80), xticks=(0,4
 widths = [0,0]
 for i, state in enumerate(states):
     m1, m2 = medians[i]
-    isau.rectangle(fig, left+widths[0], top, width*m1/100, rect_dim, ec=isau.paperColors(state),
+    isau.rectangle(ax, left+widths[0], top, width*m1/100, rect_dim, ec=isau.paperColors(state),
                    fc=isau.paperColors(state,'70'), lw=0.5, text=f'{m1:.0f}')
-    isau.rectangle(fig, left+width+rect_space-rect_dim, top+rect_space+widths[1], rect_dim, width*m2/100, ec=isau.paperColors(state),
+    isau.rectangle(ax, left+width+rect_space-rect_dim, top+rect_space+widths[1], rect_dim, width*m2/100, ec=isau.paperColors(state),
                    fc=isau.paperColors(state,'70'), lw=0.5, text=f'{m2:.0f}')
     widths[0] += width*m1/100; widths[1] += width*m2/100
 
@@ -125,7 +125,7 @@ ax = isau.axes(fig, left+width+1.7, top-rect_space, 2.5, height+rect_space)
 axs['nrem_dur'] = ax
 f = results['duration']['sws']
 fma.plotting.semPlot(f.dur/60, f*100, color=isau.paperColors('sws'), ci='nansem')
-stat = fma.analysis.clusterPermutationTest(f*100,50)
+stat = fma.statistics.clusterPermutationTest(f*100,50)
 ax.set(xlabel='state interval duration (min)',ylim=[0,60])
 fma.plotting.pHorzLine(stat['sig_mask'], f.dur/60, color='k')
 ax.set(xlabel='nREM interval duration (min)', ylabel='time spent in ISA (%)', xlim=(ax.get_xlim()[0],10))
@@ -152,7 +152,7 @@ ax.spines['left'].set_visible(False)
 
 cumw = 0
 for w, c, t in zip((0.2,0.6,0.2), isau.paperColors(('shuffle','nr','shuffle')), (None,'ISA',None)):
-    isau.rectangle(fig, left+cumw, top-rect_space, (2*width+0.2)*w, rect_dim, ec=c, fc=c[:-2]+'70', lw=0.5, text=t)
+    isau.rectangle(ax, left+cumw, top-rect_space, (2*width+0.2)*w, rect_dim, ec=c, fc=c[:-2]+'70', lw=0.5, text=t)
     cumw += (2*width+0.2)*w
 
 
@@ -162,7 +162,7 @@ ax = isau.axes(fig, left+width+0.85, top-rect_space, 2.5, height+rect_space)
 axs['nrem_concat'] = ax
 f = results['shifted'].sel(state='sws')
 fma.plotting.semPlot(f.win/60, f*100, color=isau.paperColors('sws'), ci='nansem')
-stat = fma.analysis.clusterPermutationTest(f*100,57)
+stat = fma.statistics.clusterPermutationTest(f*100,57)
 ax.set(ylim=(0,60))
 fma.plotting.pHorzLine(stat['sig_mask'], f.win/60, color='k', dy=0)
 ax.set(xlabel='concatenated nREM time (min)', xlim=(ax.get_xlim()[0],80))
