@@ -24,7 +24,7 @@ fma.plotting.plotIntervals(aval, ax=ax)
 fma.plotting.plotXY(fr, color=isau.paperColors('nr'), lw=0.8)
 ax.set(xlim=(start,stop), xticks=(), ylabel='population firing\nrate (Hz)', ylim=(0,ax.get_ylim()[1]))
 
-left, top, width, height = isau.pos(ax, fig)
+left, top, width, height = isau.pos(ax)
 ax = isau.axes(fig, LEFT, top+height, width, height)
 axs['detection_raster'] = ax
 fma.plotting.plotRaster(spikes, color=isau.paperColors('nr'), compact=True, lw=0.3)
@@ -33,7 +33,7 @@ ax.set(xlabel='time', xlim=(start,stop), xticklabels=(), ylabel='NR units',ytick
 ax.yaxis.labelpad = 7
 
 # timescale
-left, top, width, height = isau.pos(ax, fig)
+left, top, width, height = isau.pos(ax)
 isau.line(fig, [left+width*4/5,left+width], [top+height+0.15,top+height+0.15], color='k', lw=0.5)
 isau.text(fig, left+width*4.5/5, top+height+0.2, '50 s', fontsize=4, ha='center', va='top')
 

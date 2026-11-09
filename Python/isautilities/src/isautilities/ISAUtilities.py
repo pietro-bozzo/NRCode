@@ -1,11 +1,13 @@
 import numpy as np
 import fmatoolbox as fma
 import matplotlib.axes as mpla
+import matplotlib.backends.backend_agg
 import matplotlib.lines
 import matplotlib.patches
 import matplotlib.transforms
 import pathlib
 import pickle
+import contextlib
 
 
 # plotting
@@ -50,6 +52,7 @@ def paperColors(i,alpha='ff'):
               'rvhpc':         "#f4ce32", # 4bis. right ventral HPC
               'ldhpc':         "#f4ce32", # 4bis. left dorsal HPC
               'rdhpc':         "#f4ce32", # 4bis. right dorsal HPC
+              'nrem':          '#E83B7B', # 5bis. nREM
               'deltawaves':    "#2f4b7c", # 11a. deltas
               'down':          "#2f4b7c", # 11b. deltas
               'deltas_rip':    "#2f4b7c", # 11c. deltas
@@ -79,9 +82,16 @@ def paperColors(i,alpha='ff'):
         return out
 
 
-def axes(fig, left, top, width, height):
+def axes(fig, left, top, width, height, ref_ax=None, fmt=''):
     cm = 2.54 # inches to centimeter conversion factor
     fw, fh = fig.get_size_inches() * cm
+    if ref_ax is not None:
+        l, t, w, h = pos(ref_ax)
+        left += l; top += t
+        if 'l' in fmt: left += w
+        if 't' in fmt: top += h
+        if 'w' in fmt: width *= w
+        if 'h' in fmt: height *= h
     ax = fig.add_axes((left/fw, 1-(top+height)/fh, width/fw, height/fh))
     fma.plotting.adjustAxes(ax)
     return ax
@@ -95,23 +105,26 @@ def pos(ax):
     return np.array([left*fw, (1-bottom-heigth)*fh, width*fw, heigth*fh])
 
 
-def text(fig, left, top, text, **kwargs):
+def text(ax, left, top, text, **kwargs):
+    fig = ax.figure
     cm = 2.54 # inches to centimeter conversion factor
-    _, fh = fig.get_size_inches() * cm
+    fw, fh = fig.get_size_inches() * cm
     bottom = fh - top
-    cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
-    fig.text(left, bottom, text, transform=cm, **kwargs)
-    return
+    trans = matplotlib.transforms.Affine2D().scale(1/fw, 1/fh) + fig.transFigure
+    text = ax.text(left, bottom, text, transform=trans, **kwargs)
+    return text
 
 
-def line(fig, x, y, **kwargs):
-    cm = 2.54  # inches to centimeter conversion factor
-    _, fh = fig.get_size_inches() * cm
+def line(ax, x, y, **kwargs):
+    fig = ax.figure
+    cm = 2.54 # inches to centimeter conversion factor
+    fw, fh = fig.get_size_inches() * cm
     y = [fh - _y for _y in y]
-    cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
-    line = matplotlib.lines.Line2D(x, y, transform=cm, **kwargs)
-    fig.add_artist(line)
-    return
+    trans = matplotlib.transforms.Affine2D().scale(1/fw, 1/fh) + fig.transFigure
+    line = matplotlib.lines.Line2D(x, y, transform=trans, **kwargs)
+    ax.add_artist(line)
+    line.set_clip_on(False)
+    return line
 
 
 def rectangle(ax, left, top, width, height, text=None, **kwargs):
@@ -121,7 +134,6 @@ def rectangle(ax, left, top, width, height, text=None, **kwargs):
     bottom = fh - top - height
     # cm -> figure fraction -> display; follows the savefig crop
     trans = matplotlib.transforms.Affine2D().scale(1/fw, 1/fh) + fig.transFigure
-    #cm = matplotlib.transforms.Affine2D().scale(1 / 2.54) + fig.dpi_scale_trans
     rect = matplotlib.patches.Rectangle((left, bottom), width, height, transform=trans, **kwargs)
     ax.add_artist(rect)
     rect.set_clip_on(False) # add_artist sets the axes patch as clip path
@@ -139,6 +151,46 @@ def cm_box_to_inches(fig, left, top, width, height):
     x0 = left / cm
     y0 = (fh - top - height) / cm
     return Bbox.from_extents(x0, y0, x0 + width / cm, y0 + height / cm)
+
+
+@contextlib.contextmanager
+def hide_outside(fig, bbox_in):
+    """temporarily hide artists whose extent doesn't intersect bbox_in (inches)"""
+
+    def get_renderer(fig):
+        try: return fig.canvas.get_renderer() # Agg-based canvas
+        except AttributeError: pass
+        if hasattr(fig, '_get_renderer'): return fig._get_renderer() # private, matplotlib >= 3.6
+        w, h = fig.get_size_inches() * fig.dpi # last resort: standalone Agg renderer
+        return matplotlib.backends.backend_agg.RendererAgg(int(w), int(h), fig.dpi)
+    renderer = get_renderer(fig)
+    box = bbox_in.transformed(fig.dpi_scale_trans) # inches -> display px
+
+    def outside(artist):
+        try:
+            ext = artist.get_window_extent(renderer)
+        except Exception:
+            return False                                   # unknown extent: keep it
+        if not (ext.width > 0 or ext.height > 0):
+            return False                                   # degenerate extent: keep it
+        return ext.x1 < box.x0 or ext.x0 > box.x1 or ext.y1 < box.y0 or ext.y0 > box.y1
+
+    candidates = list(fig.get_children())
+    for ax in fig.axes:
+        candidates += ax.get_children()
+
+    hidden = []
+    try:
+        for a in candidates:
+            if a is fig.patch or not a.get_visible():
+                continue
+            if outside(a):
+                a.set_visible(False)
+                hidden.append(a)
+        yield
+    finally:
+        for a in hidden:
+            a.set_visible(True)
 
 
 def save_axes_figs(axs, fig, froot):
@@ -159,7 +211,9 @@ def save_axes_figs(axs, fig, froot):
             ax = entry
             bbox = ax.get_tightbbox().transformed(transform)
         for fmt in ('png','svg'):
-            ax.figure.savefig(froot/f'{name}_{i}.{fmt}', transparent=True, dpi=300, format=fmt, bbox_inches=bbox)
+            with hide_outside(ax.figure, bbox):
+                ax.figure.savefig(froot/f'{name}_{i}.{fmt}', dpi=300, format=fmt, bbox_inches=bbox,
+                                   transparent= fmt != 'png', facecolor= 'white' if fmt == 'png' else 'none')
     return
 
 
@@ -179,14 +233,14 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     off_color = '#c9a6f7'
     lw = {'cartesian': 1, 'polar': 2} if format == 'paper' else {'cartesian': 3, 'polar': 5}
     s = 80 if format == 'paper' else 150
-    fs = 9 if format == 'paper' else 16
-    pad = 3 if format == 'paper' else 11
+    fs = 7 if format == 'paper' else 16
+    pad = 5 if format == 'paper' else 11
 
     for ax in axs:
         if ax.name == 'polar':
             ax.set_theta_zero_location('S')
             ax.spines['polar'].set_visible(False)
-            ax.set_xticks([0,np.pi/2,4*np.pi/6,np.pi,3*np.pi/2,10*np.pi/6],['','','ON','','','OFF'],fontsize=fs)
+            ax.set_xticks([0,np.pi/2,4*np.pi/6,np.pi,3*np.pi/2,10*np.pi/6],['','','ON','','','OFF'], fontsize=fs)
             ax.set(yticks=[])
 
             labels = ax.get_xticklabels()
@@ -194,7 +248,7 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
             labels[5].set_color(off_color)
             labels[2].set_weight('bold')
             labels[5].set_weight('bold')
-            ax.tick_params(axis='x', pad=pad+3)
+            ax.tick_params(axis='x', pad=pad)
 
             gridlines = ax.xaxis.get_gridlines()
             for i in [0,1,3,4]:
@@ -217,14 +271,14 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
 
             half_span = (span[-1] - span[0]) / 2
             x_ticks = np.arange(span[0], span[-1]+(double*2*half_span), half_span) + half_span/2
-            ax.set_xticks(x_ticks,['ON','OFF']*(double+1),fontsize=fs)
+            ax.set_xticks(x_ticks, ['ON','OFF']*(double+1))
             labels = ax.get_xticklabels()
             for i in range(double+1):
                 labels[2*i].set_color(on_color)
                 labels[2*i+1].set_color(off_color)
                 labels[2*i].set_weight('bold')
                 labels[2*i+1].set_weight('bold')
-            ax.tick_params(axis='x', length=0, pad=pad)
+            ax.tick_params(axis='x', length=0, pad=pad, labelsize=fs)
 
             ax.set(**ax_kwargs)
             ylim = ax.get_ylim()
@@ -238,24 +292,26 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     return
 
 
-def pair_violin(x, g, ax, mode='pair', dx=0.3, label=None, log=None, color=(None,None), vprop=({},{}), **kwargs):
+def pair_violin(x, g, ax, mode='pair', center=0, dx=0.3, label=None, log=None, color=(None,None), vprop=({},{}), pdraw=None, ylim2=None, **kwargs):
 
     boot = fma.statistics.hierarchicalBootstrap(x, g)
     if log: boot = tuple(np.log(b[b>0]) for b in boot)
-    fma.plotting.boxPlot((boot[0],), x=0, mode='violin', side='low', color=color[0], **vprop[0], ax=ax)
-    fma.plotting.boxPlot((boot[1],), x=dx, mode='violin', color=color[1], **vprop[1], ax=ax)
-    ax.set(xlim=(-0.8,0.8+dx), xticks=(-0.3,0.3+dx), xticklabels=(label), **kwargs)
+    fma.plotting.boxPlot((boot[0],), x=center, mode='violin', side='low', color=color[0], **vprop[0], ax=ax)
+    fma.plotting.boxPlot((boot[1],), x=center+dx, mode='violin', color=color[1], **vprop[1], ax=ax)
+    ax.set(xlim=(center-0.8,center+0.8+dx), xticks=(center-0.3,center+0.3+dx), xticklabels=(label), **kwargs)
     ax.tick_params(axis='x', pad=10, labelsize=7)
 
     if mode == 'zero':
         p = [fma.statistics.hierarchicalBootstrapTest(x[i], g[i]) for i in range(len(x))]
-        fma.plotting.pBar([[0,0,p[0]],[1,1,p[1]]], x=(-0.2,dx+0.2), ax=ax)
+        fma.plotting.pBar([[0,0,p[0]],[1,1,p[1]]], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
     elif mode == 'diff':
         p = fma.statistics.hierarchicalBootstrapTest(x[0]-x[1], g[0])
-        fma.plotting.pBar([0,1,p], x=(-0.2,dx+0.2), ax=ax)
+        fma.plotting.pBar([0,1,p], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
     else:
         p = fma.statistics.hierarchicalBootstrapTest(x, g, paired=True)
-        fma.plotting.pBar([0,1,p], x=(-0.2,dx+0.2), ax=ax)
+        fma.plotting.pBar([0,1,p], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
+
+    if ylim2 is not None: ax.set_ylim(ylim2)
 
     return
 

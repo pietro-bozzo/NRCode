@@ -23,12 +23,11 @@ dcc = [[]] * 2
 ylim = (0,0.5); yticks = (0,0.2,0.4,0.6)
 for i, r in enumerate(regs):
     for j, s in enumerate(states):
-        valid = np.all(~np.isnan(fit.sel(reg=r,state=s,val='p')), axis=1) # sessions where a fit was performed
-        h = fit.sel(reg=r,state=s,val='p')[valid].values < 0.05
-        signif = np.all(h, axis=1) # sessions where the fit was successful
-        dcc[j] = exponents.sel(reg=r,state=s,val='DCC')[valid]
+        h = fit.sel(reg=r, state=s, val='p').values < 0.05 # failed sessions get h False since p is nan
+        signif = np.all(h, axis=1) # sessions where the fit was performed and significant for S and D
+        dcc[j] = exponents.sel(reg=r, state=s, val='DCC').copy(deep=True)
         dcc[j][~signif] = np.nan
-    valid = ~np.isnan(dcc[0]) | ~np.isnan(dcc[1]) # sessions where at least one condition was significant
+    valid = ~np.isnan(dcc[0]) | ~np.isnan(dcc[1]) # keep sessions where at least one condition was significant
     for j, s in enumerate(states):
         dcc[j] = dcc[j][valid]
         dcc[j][np.isnan(dcc[j])] = dcc[j][~np.isnan(dcc[j])].max() # input non significant fits with highest observed distance
@@ -41,7 +40,7 @@ ax[0].set(ylabel='DCC')
 
 # xCorr    SHOW THAT PEAKS ARE ~ZERO FOR nISA AND >0 FOR ISA ??
 results = isau.load_results(res_root / 'unitLagCorr.pkl')
-left, top, width, height = isau.pos(ax[-1], fig)
+left, top, width, height = isau.pos(ax[-1])
 ax = isau.axes(fig, left+width+VSPACE, top, 2.8, height)
 axs['corr'] = ax
 corr = results['corr']
@@ -59,7 +58,7 @@ for j, c in enumerate(['nisa','isa']):
     reg_data = corr.sel(cond=c, reg=reg)
     reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
     p = scipy.stats.wilcoxon(reg_data, axis=0, alternative='greater', nan_policy='omit').pvalue
-    _, p = fma.analysis.holmBonferroni(p, return_reject=True)
+    _, p = fma.statistics.holmBonferroni(p, return_reject=True)
     fma.plotting.pHorzLine(p, reg_data.lag, color=color[j], lw=2)
 ax.set(xticks=(-0.15,-0.05,0.05,0.15), ylabel=r'$\langle$Δ Spearman corr$\rangle$', yticks=np.array((-0.3,0,0.3,0.6,0.9))*1e-3)
 
@@ -77,7 +76,7 @@ def plotCMap(x,ax=None,reg=None,**kwargs):
 
 # ripples xCorr
 results = isau.load_results(res_root / 'unitPECorr.pkl')
-left, top, width, height = isau.pos(ax, fig)
+left, top, width, height = isau.pos(ax)
 ax = [isau.axes(fig, left+width+VSPACE+i*(height+VSPACE), top, height, height) for i in range(2)]
 for n, a in zip(('xcorr_rip_ISA','xcorr_rip_nISA'), ax): axs[n] = a
 corr = results['rip']
@@ -89,7 +88,7 @@ for a, isa in enumerate([True,False]):
     reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
     # significance
     w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-    _, h = fma.analysis.holmBonferroni(w, return_reject=True)
+    _, h = fma.statistics.holmBonferroni(w, return_reject=True)
     # plot result
     out = plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2, alpha=np.where(h,1.0,0.5),
                    bar=label[a], ax=ax[a], reg=reg, aspect='preserve')
@@ -101,7 +100,7 @@ out[1].ax.set_position([bb.xmax+0.03, bb.ymin+dy, 0.01, bb.height-2*dy])
 axs['xcorr_rip_cb'] = out[1].ax
 
 # bootstrap upper-right quadrant
-left, top, width, height = isau.pos(ax[-2], fig)
+left, top, width, height = isau.pos(ax[-2])
 ax = isau.axes(fig, left, top+height+VSPACE, 2.8, height)
 def mask_quadrant(x,a=-2,b=-2,n=7):
     i, j = np.indices(x.shape[-2:])
@@ -120,7 +119,7 @@ axs['peak_rip'] = ax
 
 
 # deltas xCorr
-left, top, width, height = isau.pos(ax, fig)
+left, top, width, height = isau.pos(ax)
 ax = [isau.axes(fig, LEFT+i*(height+VSPACE), top, height, height) for i in range(2)]
 for n, a in zip(('xcorr_del_ISA','xcorr_del_nISA'), ax): axs[n] = a
 corr = results['delta']
@@ -132,7 +131,7 @@ for a, isa in enumerate([True,False]):
     reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
     # significance
     w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-    _, h = fma.analysis.holmBonferroni(w, return_reject=True)
+    _, h = fma.statistics.holmBonferroni(w, return_reject=True)
     # plot result
     out = plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2, alpha=np.where(h,1.0,0.5),
                    bar=label[a], ax=ax[a], reg=reg, aspect='preserve', cmap='plasma')
@@ -149,7 +148,7 @@ axs['xcorr_del_cb'] = out[1].ax
 
 
 # spindles xCorr
-_, top, width, height = isau.pos(ax[-1], fig)
+_, top, width, height = isau.pos(ax[-1])
 ax = [isau.axes(fig, LEFT+i*(height+VSPACE), top+height+VSPACE, height, height) for i in range(2)]
 for n, a in zip(('xcorr_spin_ISA','xcorr_spin_nISA'), ax): axs[n] = a
 corr = results['spin']
@@ -161,7 +160,7 @@ for a, isa in enumerate([True,False]):
     reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
     # significance
     w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-    _, h = fma.analysis.holmBonferroni(w, return_reject=True)
+    _, h = fma.statistics.holmBonferroni(w, return_reject=True)
     # plot result
     out = plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2, alpha=np.where(h,1.0,0.5),
                    bar=label[a], ax=ax[a], reg=reg, aspect='preserve', cmap='cividis')
