@@ -82,7 +82,7 @@ def paperColors(i,alpha='ff'):
         return out
 
 
-def axes(fig, left, top, width, height, ref_ax=None, fmt=''):
+def axes(fig, left, top, width, height, ref_ax=None, fmt='', **kwargs):
     cm = 2.54 # inches to centimeter conversion factor
     fw, fh = fig.get_size_inches() * cm
     if ref_ax is not None:
@@ -93,7 +93,7 @@ def axes(fig, left, top, width, height, ref_ax=None, fmt=''):
         if 'w' in fmt: width *= w
         if 'h' in fmt: height *= h
     ax = fig.add_axes((left/fw, 1-(top+height)/fh, width/fw, height/fh))
-    fma.plotting.adjustAxes(ax)
+    fma.plotting.adjustAxes(ax, **kwargs)
     return ax
 
 
@@ -115,13 +115,13 @@ def text(ax, left, top, text, **kwargs):
     return text
 
 
-def line(ax, x, y, **kwargs):
+def line(ax, x, y, lw=0.3, **kwargs):
     fig = ax.figure
     cm = 2.54 # inches to centimeter conversion factor
     fw, fh = fig.get_size_inches() * cm
     y = [fh - _y for _y in y]
     trans = matplotlib.transforms.Affine2D().scale(1/fw, 1/fh) + fig.transFigure
-    line = matplotlib.lines.Line2D(x, y, transform=trans, **kwargs)
+    line = matplotlib.lines.Line2D(x, y, transform=trans, lw=lw, **kwargs)
     ax.add_artist(line)
     line.set_clip_on(False)
     return line
@@ -217,6 +217,17 @@ def save_axes_figs(axs, fig, froot):
     return
 
 
+def plotCMap(x, ax=None, reg=None, **kwargs):
+    if ax is not None and reg is not None:
+        reg = str(reg)
+        ax.set(xlabel=f'{reg.split('-')[1].upper()} lag (s)',ylabel=f'{reg.split('-')[0].upper()} lag (s)')
+        out = fma.plotting.plotColorMap(x, x=x.lag, y=x.target, ax=ax, interpolation='none', **kwargs)
+        if isinstance(out, tuple):
+            out[1].ax.ticklabel_format(axis='y', style='sci', scilimits=(0,0), useMathText=True)
+            out[1].ax.yaxis.get_offset_text().set_fontsize(5)
+    return out
+
+
 def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     """span: ON start to OFF end, for linear axis
     double: if True, plot multiple cycles, for linear axis
@@ -292,26 +303,28 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     return
 
 
-def pair_violin(x, g, ax, mode='pair', center=0, dx=0.3, label=None, log=None, color=(None,None), vprop=({},{}), pdraw=None, ylim2=None, **kwargs):
+def pair_violin(x, g, ax, mode='pair', center=0, dx=0.3, label=(None,None), log=None, bw=0.5, color=(None,None),
+                vprop=({},{}), pdraw=None, yticks=None, ylim2=None, **kwargs):
 
     boot = fma.statistics.hierarchicalBootstrap(x, g)
     if log: boot = tuple(np.log(b[b>0]) for b in boot)
-    fma.plotting.boxPlot((boot[0],), x=center, mode='violin', side='low', color=color[0], **vprop[0], ax=ax)
-    fma.plotting.boxPlot((boot[1],), x=center+dx, mode='violin', color=color[1], **vprop[1], ax=ax)
-    ax.set(xlim=(center-0.8,center+0.8+dx), xticks=(center-0.3,center+0.3+dx), xticklabels=(label), **kwargs)
+    fma.plotting.boxPlot((boot[0],), x=center, mode='violin', bw_method=bw, side='low', color=color[0], **vprop[0], ax=ax)
+    fma.plotting.boxPlot((boot[1],), x=center+dx, mode='violin', bw_method=bw, color=color[1], **vprop[1], ax=ax)
+    ax.set(xlim=(center-0.8,center+0.8+dx), xticks=(center-0.3,center+0.3+dx), xticklabels=label, **kwargs)
     ax.tick_params(axis='x', pad=10, labelsize=7)
 
     if mode == 'zero':
         p = [fma.statistics.hierarchicalBootstrapTest(x[i], g[i]) for i in range(len(x))]
-        fma.plotting.pBar([[0,0,p[0]],[1,1,p[1]]], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
+        fma.plotting.pBar([[0,0,p[0][0]],[1,1,p[1][0]]], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
     elif mode == 'diff':
         p = fma.statistics.hierarchicalBootstrapTest(x[0]-x[1], g[0])
-        fma.plotting.pBar([0,1,p], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
+        fma.plotting.pBar([0,1,p[0]], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
     else:
         p = fma.statistics.hierarchicalBootstrapTest(x, g, paired=True)
         fma.plotting.pBar([0,1,p], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
 
-    if ylim2 is not None: ax.set_ylim(ylim2)
+    if yticks is not None: ax.set(yticks=yticks)
+    if ylim2 is not None: ax.set(ylim=ylim2)
 
     return
 
@@ -526,6 +539,25 @@ def epochIndex(events,epochs,duration=None,nrem=None):
 
     return events, epoch_idx
 
+
+def crit_compare(fit, exp, key):
+    name, vals = key
+    dcc = []; perc = []
+    for i, v in enumerate(vals):
+        valid = np.all(~np.isnan(fit.sel(val='p', **{name:v})), axis=1) # sessions where a fit was performed
+        h = fit.sel(val='p', **{name:v})[valid].values < 0.05
+        signif = np.all(h, axis=1) # sessions where the fit was successful
+        perc.append(float(signif.mean())) # percentage of successful fits
+        dcc.append(exp.sel(val='DCC', **{name:v}))
+        dcc[-1][~valid] = np.nan
+        dcc[-1][valid][~signif] = np.nan
+    valid = ~np.isnan(np.array(dcc)).all(axis=0)
+    # input non significant fits with highest observed distance
+    for j in range(len(dcc)):
+        dcc[j] = dcc[j][valid]
+        dcc[j][np.isnan(dcc[j])] = dcc[j][~np.isnan(dcc[j])].max()
+
+    return tuple(dcc), perc
 
 # results management
 
