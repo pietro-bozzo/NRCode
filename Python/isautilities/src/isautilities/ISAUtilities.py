@@ -356,6 +356,7 @@ def bayesHier(data, groups,
         if g.ndim == 1: g = g[:,None]
         if len(d) != len(g):
             raise ValueError(f"data[{i}] and groups[{i}] must have the same number of samples (rows)")
+        valid = ~np.isnan(d); d = d[valid]; g = g[valid] # drop missing values
         f = pd.DataFrame(g, columns=[f"group{k}" for k in range(g.shape[1])])
         f.insert(0, "condition", i) # add condition column
         f["values"] = d.astype(float)
@@ -375,7 +376,7 @@ def bayesHier(data, groups,
     # varying intercept per group, fixed effect of condition
     formula = f"values ~ condition + ({'1 + condition' if random_slope else '1'}|group0)"
     model = bmb.Model(formula, df)
-    idata = model.fit(draws=2000, tune=1000, chains=4, random_seed=1, target_accept=target_accept)
+    idata = model.fit(draws=2000, tune=1000, chains=4, random_seed=1, target_accept=target_accept, progressbar=False)
     post = idata.posterior
 
     # Diagnostics: want r_hat close to 1 (commonly < 1.01) and large ESS
@@ -387,12 +388,10 @@ def bayesHier(data, groups,
     #az.plot_posterior(idata, var_names=["condition"], ref_val=0)
 
     # condition means, per draw (i.e., sample of all parameters from MCMC)
-    print(df["condition"].cat.categories)
     ref = str(df["condition"].cat.categories[0]) # reference condition
     chains = {ref: post["Intercept"].values.ravel()}  # samples of ref condition
     other_cond = post["condition"] # samples of other conditions
     extra = [d for d in other_cond.dims if d not in ("chain", "draw")]  # CHECK IF CAN EVER HAVE len > 1
-    print(extra)
     dim = extra[0]
     for lab in other_cond[dim].values:
         chains[str(lab)] = (post["Intercept"] + other_cond.sel({dim: lab})).values.ravel()  # ravel MCM chains
