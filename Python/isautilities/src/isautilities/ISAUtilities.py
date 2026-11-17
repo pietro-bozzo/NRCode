@@ -329,6 +329,90 @@ def pair_violin(x, g, ax, mode='pair', center=0, dx=0.3, label=(None,None), log=
     return
 
 
+def bayesHier(data, groups, target_accept=0.95, hdi_prob=0.95):
+    import bambi as bmb
+    import arviz as az
+    import pandas as pd
+    import itertools
+
+    # defaults
+    if not isinstance(data, tuple):
+        data = (data,)
+    if groups is None:
+        groups = [np.empty((len(d),0)) for d in data]
+    elif not isinstance(groups, tuple):
+        groups = (groups,)
+    if len(data) != len(groups):
+        raise ValueError("'data' and 'groups' must have the same length")
+
+    # set up df
+    dists = []
+    ci = []
+    frames = []
+    n_cols = None
+    for i, (d, g) in enumerate(zip(data,groups)):
+
+        # validate shape
+        d = np.asarray(d).ravel(); g = np.asarray(g)
+        if g.ndim == 1: g = g[:,None]
+        if len(d) != len(g):
+            raise ValueError(f"data[{i}] and groups[{i}] must have the same number of samples (rows)")
+        f = pd.DataFrame(g, columns=[f"group{k}" for k in range(g.shape[1])])
+        f.insert(0, "condition", i) # add condition column
+        f["values"] = d.astype(float)
+        frames.append(f)
+
+        # validate number of columns
+        if n_cols is not None and n_cols != f.shape[1]:
+            raise ValueError(f"datasets must have the same number of hierarchy levels (columns)")
+        n_cols = f.shape[1]
+    df = pd.concat(frames, ignore_index=True)
+
+    # cast to categorical
+    df["condition"] = df["condition"].astype("category")
+    for k in range(n_cols-2):
+        df[f"group{k}"] = df[f"group{k}"].astype("category")
+
+    # varying intercept per group, fixed effect of condition
+    model = bmb.Model("values ~ condition + (1|group0)", df)
+    idata = model.fit(draws=2000, tune=1000, chains=4, random_seed=1, target_accept=target_accept)
+
+    # Diagnostics: want r_hat close to 1 (commonly < 1.01) and large ESS
+    print(az.summary(idata, var_names=["Intercept","condition","1|group0_sigma","sigma"]))
+
+    # The effect of interest: difference between conditions
+    # (the coefficient is relative to the reference level, the first category)
+    #az.plot_posterior(idata, var_names=["condition"], ref_val=0)
+
+    # --- per-condition means (population level), per draw (i.e., sample of all parameters from MCMC) ---
+    post = idata.posterior
+    coef = post["condition"]
+    extra = [d for d in coef.dims if d not in ("chain", "draw")]
+    ref = str(df["condition"].cat.categories[0])
+    means = {ref: post["Intercept"]}
+    dim = extra[0]
+    for lab in coef[dim].values:
+        means[str(lab)] = post["Intercept"] + coef.sel({dim: lab})
+    rows = []
+    for k,v in means.items():
+        s = v.values.ravel();
+        lo, hi = az.hdi(s, prob=hdi_prob)
+        rows.append(dict(condition=k,mean=s.mean(),hdi_low=lo,hdi_high=hi))
+    print(pd.DataFrame(rows).round(3))
+
+    # --- pairwise differences, same draws ---
+    diffs = {f"{b}_minus_{a}": means[b] - means[a]
+             for a, b in itertools.combinations(means.keys(), 2)}
+    rows = []
+    for k, v in diffs.items():
+        s = v.values.ravel(); lo, hi = az.hdi(s, prob=hdi_prob)
+        rows.append(dict(contrast=k, mean=s.mean(), hdi_low=lo, hdi_high=hi,
+                         P_pos=(s > 0).mean()))
+    print(pd.DataFrame(rows).round(3))
+
+    return idata, means, diffs
+
+
 # computation
 
 def ISCycles(isa,on,return_off=False):
