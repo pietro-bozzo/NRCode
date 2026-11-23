@@ -8,16 +8,19 @@ import pathlib
 froot = pathlib.Path().cwd().parent.parent.parent / 'Results'
 res_root = froot / 'Data'
 output_file = froot / 'FinalFigures' / 'Fig2'
-LEFT = 0.8; TOP = 0.5; HSPACE = 1; VSPACE = 1.5
+LEFT = 0.8; TOP = 0.5; HSPACE = 1; VSPACE = 1.5; HEIGHTS = np.array([3,2.3,2]); TOPS = np.cumsum([TOP]+list(HEIGHTS+VSPACE))
 axs = {}
 SAVE_PANELS = True
 fig = fma.plotting.figure(n=0, size=(17.5,11.5))
 
 
+# --- first row ---
+rid = 0
+
 # ISA is exclusive to NR
 results = isau.load_results(res_root / 'detectISA.pkl')
-height = 3
-ax = isau.axes(fig, LEFT, TOP, 4, height)
+height = HEIGHTS[rid]
+ax = isau.axes(fig, LEFT, TOPS[rid], 4, HEIGHTS[rid])
 axs['unique'] = ax
 labels = ['NR','TH','iHPC','vHPC','dHPC','PFC','AMY']
 regs = results['regs']; b = results['ISA_fraction']; p = results['p_val']
@@ -42,14 +45,14 @@ ax.set(xlim=(0,30), xlabel='ISA cycle duration (s)', ylim=(None,0.1))
 ax = isau.axes(fig, width*0.75, 0, 0.55, 0.65, ax, 'wh')
 axs['cycle_mode'] = ax
 peak_t_f = lambda a, axis: np.nanmean(cycles['nr'].t[np.argmax(a, axis=1-axis)])
-b, ci = fma.statistics.hierarchicalBootstrap(cycles['nr'], cycles['nr'].rat, stat=peak_t_f, return_ci=True)
-fma.plotting.boxPlot(b[0], mode='violin', color='gray', facecolor='none')
-print(f'cycle mode {b[0].mean()}, 95% CI: {ci[0]}')
+b, ci, _, _ = fma.statistics.hierarchicalBootstrap(cycles['nr'], cycles['nr'].rat, stat=peak_t_f)
+fma.plotting.boxPlot(b, mode='violin', color='gray', facecolor='none')
+print(f'cycle mode {b.mean()}, 95% CI: {ci.ravel()}')
 [ax.axhline(c, color=isau.paperColors('nr'), ls='--', lw=0.6) for c in ci[0]]
 ax.set(xticks=(), yticks=(5,7,9))
 
 # epoch duration
-ax = isau.axes(fig, HSPACE*0.8, height*(1-h), width, h, axs['unique'], 'lh')
+ax = isau.axes(fig, HSPACE*0.8, HEIGHTS[rid]*(1-h), width, h, axs['unique'], 'lh')
 axs['epoch_pdf'] = ax
 fma.plotting.semPlot(isa['nr'].t, isa['nr'], color=isau.paperColors('nr'))
 ax.set(xlim=(0,300), xlabel='ISA epoch duration (s)', ylim=(None,0.008), yticks=(0,0.008))
@@ -57,8 +60,8 @@ ax.set_ylabel('                        distribution', labelpad=3)
 ax.ticklabel_format(axis='y', style='sci', scilimits=(-2,-2), useMathText=True)
 ax.yaxis.get_offset_text().set_fontsize(5)
 peak_t_f = lambda a, axis: np.nanmean(isa['nr'].t[np.argmax(a, axis=1-axis)])
-b, ci = fma.statistics.hierarchicalBootstrap(isa['nr'], isa['nr'].rat, stat=peak_t_f, return_ci=True)
-print(f'epoch mode {b[0].mean()}, 95% CI: {ci[0]}')
+b, ci, _, _ = fma.statistics.hierarchicalBootstrap(isa['nr'], isa['nr'].rat, stat=peak_t_f)
+print(f'epoch mode {b.mean()}, 95% CI: {ci.ravel()}')
 
 
 # NR units participation
@@ -108,8 +111,7 @@ low = p - low
 low[low<0] = 0
 high = high - p
 ax.bar(range(1), np.array(p)*100, yerr=np.vstack((low,high))*100, color=color)
-ax.set(xlim=(-0.8,0.8), xticks=(), ylim=(0,100)) # xlim=(-0.8,1.8)
-#ax.set_xticks(range(2), labels=('all  ','  ON'), fontsize=6)
+ax.set(xlim=(-0.8,0.8), xticks=(), ylim=(0,100))
 ax.set_ylabel('% of participating units', fontsize=6)
 
 
@@ -128,7 +130,7 @@ isau.ISAxes(ax, double=True)
 
 # typical cycle
 results = isau.load_results(res_root / 'regionStatusFiring.pkl')
-ax = isau.axes(fig, l, height*(1-h), width, h, axs['unit_colormap'], 'lh')
+ax = isau.axes(fig, l, HEIGHTS[rid]*(1-h), width, h, axs['unit_colormap'], 'lh')
 axs['cycle_avg'] = ax
 fr_on = results['fr_on']; fr_off = results['fr_off']
 x = np.concatenate((fr_on.phi,fr_off.phi))
@@ -139,77 +141,18 @@ isau.ISAxes(ax, double=True)
 
 
 
-# criticality
-results = isau.load_results(res_root / 'criticalExponents.pkl')
-ax = [isau.axes(fig, 0, VSPACE, 2.4, 2, axs['unique'], 't')]
-ax.append(isau.axes(fig, HSPACE, 0, 1, 1, ax[-1], 'lwh'))
-for n, a in zip(('aval_S','aval_D'), ax): axs[n] = a
-
-# S, D
-# FIND EXAMPLE WITH BEST range diff: 2? 7? 18? 22?   MAYBE AWAKE!
-fit = results['fit_states']; pdf = results['pdf_states']
-def plotPowerLaw(pdf, fit, ax, name=None, label=None, **kwargs):
-    fma.plotting.plotXY(pdf, label=label, ax=ax, lw=1, **kwargs)
-    ax.axvline(fit.sel(val='xmin'), ls='--', lw=0.5, **kwargs)
-    ax.axvline(fit.sel(val='xmax'), ls='--', lw=0.5, **kwargs)
-    ax.set(xscale='log', yscale='log')
-    if name is not None:
-        ax.set(xlabel=name)
-    ax.set_xticks((1,10,100))
-    return
-session = 2; i = 2; s = list(pdf[session].keys())[i] # wake
-regs = []
-for j, r in enumerate(pdf[session][s]):
-    regs.append(r)
-    color = isau.paperColors(r)
-    plotPowerLaw(pdf[session][s][r]['dur'], fit.sel(reg=r,state=s,q='D')[session], name='duration (log)', color=color, ax=ax[1])
-    plotPowerLaw(pdf[session][s][r]['size'], fit.sel(reg=r,state=s,q='S')[session], name='size (log)', color=color, ax=ax[0])
-ax[0].set(ylabel='distribution (log)'); ax[1].set(ylabel='distribution (log)')
-
-
-# gamma
-ax = isau.axes(fig, HSPACE, 0, 1, 1, ax[-1], 'lwh')
-axs['gamma'] = ax
-for j, r in enumerate(pdf[session][s]):
-    fma.plotting.plotXY(np.exp(pdf[session][s][r]['mean_size']), lw=0.8, markersize=1, marker='o', color=isau.paperColors(r), ax=ax)
-ax.set(xscale='log', yscale='log')
-ax.set(xlabel='duration (log)', xticks=(10,), ylabel=r'$\langle$size$\rangle$ (log)', yticks=(10,))
-[a.set_minor_formatter(mticker.NullFormatter()) for a in (ax.xaxis, ax.yaxis)]
-
-
-# criticality in nREM
-exponents = results['exp_states']; state = 'other'
-w = 1.4; states = ('other','sws')
-for i, r in enumerate(('pfc','hpc','nr')):
-    ax = isau.axes(fig, HSPACE+w*i, 0, w, 1, axs['gamma'], 'lh')
-    axs[f'dcc_{r}'] = ax
-    dcc, perc = isau.crit_compare(fit.sel(reg=r), exponents.sel(reg=r), ('state',states))
-    isau.pair_violin(dcc, tuple(d.rat for d in dcc), ax=ax, color=isau.paperColors(states), xlabel=r.upper(), ylim=(0,0.5),
-                     ylim2=(0,0.6), ylabel='' if i else 'DCC', yticks=() if i else (0,0.2,0.4,0.6))
-    print(r, perc)
-    if i: ax.spines.left.set_visible(False)
-
-
-# NR criticality in ISA vs nISA
-exponents = results['exp_ISA']; fit = results['fit_ISA']
-ax = isau.axes(fig, HSPACE-0.5, 0, 1, 1, ax, 'lwh')
-axs['dcc_nr'] = ax
-dcc, perc = isau.crit_compare(fit.sel(reg='nr'), exponents.sel(reg='nr'), ('state',fit.state.values))
-isau.pair_violin(dcc, tuple(d.rat for d in dcc), ax=ax, color=isau.paperColors(('nr','shuffle')),
-                 label=('ISA','nISA'), ylim=(0,0.5), ylim2=(0,0.6), yticks=(0,0.2,0.4,0.6))
-
-
+# --- second row ---
+rid = 1
 
 # % of states spent in ISA
 results = isau.load_results(res_root / 'ISAStates.pkl')
-ax = isau.axes(fig, 0, VSPACE, 2.1, 2.3, axs['aval_S'], 't')
+ax = isau.axes(fig, LEFT, TOPS[rid], 2.1, HEIGHTS[rid])
 axs['states_inv'] = ax
 states, f = results['states'], results['fraction'].sel(val='reverse')
-b = fma.statistics.hierarchicalBootstrap(tuple(f.sel(state=s)*100 for s in states), tuple(f.rat for s in states))
-p = fma.statistics.hierarchicalBootstrapTest(tuple(f.sel(state=s) for s in states), tuple(f.rat for s in states), paired=True)
-fma.plotting.boxPlot(b, mode='violin', color=isau.paperColors(states), label=('nREM','REM','wake'))
+b, _, p, t = fma.statistics.hierarchicalBootstrap(tuple(f.sel(state=s)*100 for s in states), tuple(f.rat for s in states), paired=True)
+fma.plotting.boxPlot(b, mode='violin', bw_method=0.4, color=isau.paperColors(states), label=('nREM','REM','wake'))
 ax.set(ylim=(ax.get_ylim()[0],65))
-fma.plotting.pBar(p[['Condition 1', 'Condition 2', 'Corrected p-value']])
+fma.plotting.pBar(np.column_stack((t['labels'],p)))
 ax.set(ylabel='state time spent in ISA (%)', xlim=(-0.5,2.5), ylim=(ax.get_ylim()[0],80))
 ax.tick_params(axis='x', pad=10)
 
@@ -290,6 +233,67 @@ stat = fma.statistics.clusterPermutationTest(f*100,57)
 ax.set(ylim=(0,60))
 fma.plotting.pHorzLine(stat['sig_mask'], f.win/60, color='k', dy=0)
 ax.set(xlabel='concatenated nREM time (min)')
+
+
+# --- third row ---
+rid = 2
+
+# criticality
+results = isau.load_results(res_root / 'criticalExponents.pkl')
+ax = [isau.axes(fig, LEFT, TOPS[rid], 2.4, HEIGHTS[rid])]
+ax.append(isau.axes(fig, HSPACE, 0, 1, 1, ax[-1], 'lwh'))
+for n, a in zip(('aval_S','aval_D'), ax): axs[n] = a
+
+# S, D
+# FIND EXAMPLE WITH BEST range diff: 2? 7? 18? 22?
+fit = results['fit_states']; pdf = results['pdf_states']
+def plotPowerLaw(pdf, fit, ax, name=None, label=None, **kwargs):
+    fma.plotting.plotXY(pdf, label=label, ax=ax, ls='none', lw=1, marker='o', ms=1.5, **kwargs)
+    ax.axvline(fit.sel(val='xmin'), ls='--', lw=0.5, **kwargs)
+    ax.axvline(fit.sel(val='xmax'), ls='--', lw=0.5, **kwargs)
+    ax.set(xscale='log', yscale='log')
+    if name is not None:
+        ax.set(xlabel=name)
+    ax.set_xticks((1,10,100))
+    return
+session = 2; r = 'nr'; states = ('sws','other') # nrem, wake
+for i, s in enumerate(states):
+    color = isau.paperColors(s)
+    plotPowerLaw(pdf[session][s][r]['dur'], fit.sel(reg=r,state=s,q='D')[session], name='duration (log)', color=color, ax=ax[1])
+    plotPowerLaw(pdf[session][s][r]['size'], fit.sel(reg=r,state=s,q='S')[session], name='size (log)', color=color, ax=ax[0])
+ax[0].set(ylabel='distribution (log)'); ax[1].set(ylabel='distribution (log)')
+
+
+# gamma
+ax = isau.axes(fig, HSPACE, 0, 1, 1, ax[-1], 'lwh')
+axs['gamma'] = ax
+for i, s in enumerate(states):
+    fma.plotting.plotXY(np.exp(pdf[session][s][r]['mean_size']), ls='none', lw=1, markersize=1.5, marker='o', color=isau.paperColors(s), ax=ax)
+ax.set(xscale='log', yscale='log')
+ax.set(xlabel='duration (log)', xticks=(10,), ylabel=r'$\langle$size$\rangle$ (log)', yticks=(10,))
+[a.set_minor_formatter(mticker.NullFormatter()) for a in (ax.xaxis, ax.yaxis)]
+
+
+# criticality in wake
+exponents = results['exp_states']; state = 'other'
+w = 1.4; states = ('other','sws')
+for i, r in enumerate(('pfc','hpc','nr')):
+    ax = isau.axes(fig, HSPACE+w*i, 0, w, 1, axs['gamma'], 'lh')
+    axs[f'dcc_{r}'] = ax
+    dcc, perc = isau.crit_compare(fit.sel(reg=r), exponents.sel(reg=r), ('state',states))
+    isau.pair_violin(dcc, tuple(d.rat for d in dcc), ax=ax, mode='hb', alternative='greater', color=isau.paperColors(states), ylim=(0,0.5),
+                     xlabel=r.upper(), ylim2=(0,0.6), ylabel='' if i else 'DCC', yticks=() if i else (0,0.2,0.4,0.6))
+    print(r, perc)
+    if i: ax.spines.left.set_visible(False)
+
+
+# NR criticality in ISA vs nISA
+exponents = results['exp_ISA']; fit = results['fit_ISA']
+ax = isau.axes(fig, HSPACE-0.5, 0, 1, 1, ax, 'lwh')
+axs['dcc_nr'] = ax
+dcc, perc = isau.crit_compare(fit.sel(reg='nr'), exponents.sel(reg='nr'), ('state',fit.state.values))
+isau.pair_violin(dcc, tuple(d.rat for d in dcc), ax=ax, color=isau.paperColors(('nr','shuffle')),
+                 mode='hb', alternative='less', label=('ISA','nISA'), ylim=(0,0.5), ylim2=(0,0.6), yticks=(0,0.2,0.4,0.6))
 
 
 

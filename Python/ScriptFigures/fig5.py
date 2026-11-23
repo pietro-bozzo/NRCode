@@ -1,7 +1,6 @@
 import fmatoolbox as fma
 import isautilities as isau
 import numpy as np
-import scipy.stats
 import pathlib
 
 # parameters
@@ -9,6 +8,7 @@ froot = pathlib.Path().cwd().parent.parent.parent / 'Results'
 res_root = froot / 'Data'
 output_file = froot / 'FinalFigures' / 'Fig5'
 FW = 17.5; FH = 15; LEFT = 1; TOP = 0.5; GAP = 1; HSPACE = 1.5; VSPACE = 1.25
+HEIGHTS = np.array([3,2.3,2]); TOPS = np.cumsum([TOP]+list(HEIGHTS+VSPACE))
 fig = fma.plotting.figure(n=0, size=(FW,FH))
 axs = {}
 
@@ -17,7 +17,7 @@ axs = {}
 results = isau.load_results(res_root / 'detectISA.pkl')
 ax = isau.axes(fig, FW/2+GAP/2, TOP, 1.95, 2.5)
 axs['ISA_frac_s2'] = ax
-frac1, frac2 = results['ISA_s1_s2']; frac1 = frac1.sel(region='nr')
+frac1, frac2 = results['ISA_s1_s2']; frac1 = frac1.sel(region='nr'); frac2 = frac2.sel(region='nr')
 isau.pair_violin((frac1*100,frac2*100), (frac1.rat,frac2.rat), ax=ax, color=isau.paperColors(('nr','nr')),
                  label=('baseline','post-task'), ylabel='ISA time (%)', ylim=(0,37), pdraw=(True,)*4)
 ax.set(ylim=(0,40))
@@ -132,7 +132,7 @@ ax.set(xlabel='PFC to HPC lag (s)')
 
 # ripples xCorr change
 results = isau.load_results(res_root / 'unitPECorr.pkl')
-corr = results['rip']; corr2 = results['rip_s2']; reg = corr.reg.values[1]
+corr = results['rip']; corr2 = results['rip_s2']; reg = 'hpc-pfc'
 vmin = 0.0010; vmax = 0.0035
 label = (None,None,None,r'$\langle$Δ Spearman corr$\rangle$')
 i = 0
@@ -141,12 +141,8 @@ for a, isa in enumerate([True, False]):
         ax = isau.axes(fig, HSPACE+a*(width+space), sl*(width+space), width, width, axs['corr_s1'] ,'l')
         axs[f"xcorr_rip_{'' if isa else 'n'}ISA_s{sl+1}"] = ax
         reg_data = c.sel(reg=reg, isa=isa)
-        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
-        # significance
-        #w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-        #_, h = fma.statistics.holmBonferroni(w, return_reject=True)
-        # plot result
-        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2, #alpha=np.where(h,1.0,0.5),
+        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True).mean(dim='shuffle')
+        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2,
                        bar=label[i], ax=ax, reg=reg, aspect='preserve')
         ax.set(ylabel='' if a else 'HPC lag (s)')
         if not sl:
@@ -162,7 +158,7 @@ axs['xcorr_rip_cb'] = out[1].ax
 
 
 # deltas xCorr change
-corr = results['delta']; corr2 = results['delta_s2']; reg = corr.reg.values[1]
+corr = results['delta']; corr2 = results['delta_s2']
 vmin = 0; vmax = 0.0055
 label = (None,None,None,r'$\langle$Δ Spearman corr$\rangle$')
 width = 2; space = 0.7; i = 0
@@ -171,12 +167,8 @@ for a, isa in enumerate([True, False]):
         ax = isau.axes(fig, HSPACE+(a+2)*(width+space), sl*(width+space), width, width, axs['xcorr_rip_ISA_s1'])
         axs[f"xcorr_delta_{'' if isa else 'n'}ISA_s{sl+1}"] = ax
         reg_data = c.sel(reg=reg, isa=isa)
-        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
-        # significance
-        #w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-        #_, h = fma.statistics.holmBonferroni(w, return_reject=True)
-        # plot result
-        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2, #alpha=np.where(h,1.0,0.5),
+        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True).mean(dim='shuffle')
+        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2,
                        bar=label[i], ax=ax, reg=reg, aspect='preserve', cmap='plasma')
         ax.set(ylabel='' if a else 'HPC lag (s)')
         if not sl:

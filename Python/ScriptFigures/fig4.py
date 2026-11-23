@@ -16,13 +16,13 @@ def main():
     froot = pathlib.Path().cwd().parent.parent.parent / 'Results'
     res_root = froot / 'Data'
     output_file = froot / 'FinalFigures' / 'Fig4'
-    LEFT = 0.8; TOP = 0.5; VSPACE = 1.2; SAVE = True
-    fig = fma.plotting.figure(n=0, size=(17.5,11.5))
+    LEFT = 0.8; TOP = 0.5; VSPACE = 1.2; SMOOTH = 0.3; SAVE = True
+    fig = fma.plotting.figure(n=0, size=(17.5,7.5))
 
 
     # criticality in ISA
     results = isau.load_results(res_root / 'criticalExponents.pkl')
-    width = 1.5
+    width = 1
     ax = [isau.axes(fig, LEFT+i*width, TOP, width, 2.5) for i in range(2)]
     fit = results['fit_ISA']; exponents = results['exp_ISA']
     regs = ('pfc','hpc'); states = fit.state.values
@@ -41,7 +41,7 @@ def main():
             dcc[j][np.isnan(dcc[j])] = dcc[j][~np.isnan(dcc[j])].max() # input non significant fits with highest observed distance
 
         isau.pair_violin((dcc[0],dcc[1]), (dcc[0].rat,dcc[1].rat), color=isau.paperColors((r,'shuffle')), label=('ISA','nISA'),
-                         ax=ax[i], ylim=ylim, yticks=yticks)
+                         alternative='greater',ax=ax[i], ylim=ylim, yticks=yticks)
         ax[i].set(ylim=(0,0.6))
     ax[0].set(ylabel='DCC'); ax[1].set(yticks=());  ax[1].spines.left.set_visible(False)
 
@@ -51,21 +51,23 @@ def main():
     left, top, width, height = isau.pos(ax[-1])
     ax = isau.axes(fig, left+width+VSPACE, top, 2.8, height)
     axs['corr'] = ax
-    corr = results['corr_s1']; corr = corr.sel(shuffle=False) - corr.sel(shuffle=True).mean(dim='shuffle')
-    reg = 'hpc-pfc'; color = isau.paperColors(('shuffle','nr'))
+    corr = results['corr_s1']; reg = 'hpc-pfc'
+    color = isau.paperColors(('shuffle','nr'))
     ax.axvline(0, ls='--', color='k', lw=0.5, zorder=0)
-    for j, c in enumerate(['nisa','isa']):
-        reg_data = corr.sel(cond=c, reg=reg)
-        fma.plotting.semPlot(reg_data.lag, reg_data, smooth=0.7, color=color[j])
+    for j, cond in enumerate(['nisa','isa']):
+        c = corr.sel(cond=cond, reg=reg)
+        c = c.sel(shuffle=False) - c.sel(shuffle=True).mean(dim='shuffle')
+        fma.plotting.semPlot(c.lag, c, smooth=0.7, color=color[j])
     ax.set(xlabel='PFC to HPC lag (s)')
     ax.ticklabel_format(axis='y', style='sci', scilimits=(0,0), useMathText=True)
     ax.yaxis.get_offset_text().set_fontsize(5)
     # stats
-    for j, c in enumerate(['nisa','isa']):
-        reg_data = corr.sel(cond=c, reg=reg)
-        p = scipy.stats.wilcoxon(reg_data, axis=0, alternative='greater', nan_policy='omit').pvalue
-        _, p = fma.statistics.holmBonferroni(p, return_reject=True)
-        fma.plotting.pHorzLine(p, reg_data.lag, color=color[j], lw=2)
+    p = []
+    for j, cond in enumerate(['nisa','isa']):
+        c = corr.sel(cond=cond, reg=reg)
+        p.append(fma.statistics.maxStatisticTest(c.sel(shuffle=False), c.sel(shuffle=True).transpose(..., 'shuffle'),
+                                                 group=c.rat))
+    fma.plotting.pHorzLine(np.array(p).T, c.lag, color=color, lw=1)
     ax.set(xticks=(-0.15,-0.05,0.05,0.15), ylabel=r'$\langle$Δ Spearman corr$\rangle$',
            yticks=np.array((-0.2,0,0.2,0.4,0.6,0.8))*1e-3)
 
@@ -73,12 +75,14 @@ def main():
     ax = isau.axes(fig, 0.4, 0, 0.85, 0.5, ax, 'lh')
     axs['corr_peak'] = ax
     peaks = []
-    for j, c in enumerate(['isa','nisa']):
-        peak = corr.sel(cond=c, reg=reg).dropna(dim='rat', how='all').argmax(dim='lag')
+    for j, cond in enumerate(['isa','nisa']):
+        c = corr.sel(cond=cond, reg=reg)
+        c = c.sel(shuffle=False) - c.sel(shuffle=True).mean(dim='shuffle')
+        peak = c.dropna(dim='rat', how='all').argmax(dim='lag')
         peaks.append(corr.lag[peak])
     isau.pair_violin(tuple(peaks), (peaks[0].rat,peaks[1].rat), color=isau.paperColors(('nr','shuffle')), label=('ISA','nISA'),
-                     mode='zero', ylim2=(-0.05,0.05), ax=ax)
-    isau.bayesHier(tuple(peaks), (peaks[0].rat,peaks[1].rat))
+                     alternative='less', ylim2=(-0.05,0.05), ax=ax)
+    #isau.bayesHier(tuple(peaks), (peaks[0].rat,peaks[1].rat))
 
 
     # ripples xCorr
@@ -86,31 +90,26 @@ def main():
     left, top, width, height = isau.pos(axs['corr'])
     ax = [isau.axes(fig, left+width+VSPACE*2+i*(height+0.7), top, height, height) for i in range(2)]
     for n, a in zip(('xcorr_rip_ISA','xcorr_rip_nISA'), ax): axs[n] = a
-    corr = results['rip']; corr = corr.sel(shuffle=False) - corr.sel(shuffle=True) # increase from shuffle
-    vmin = 0.0010; vmax = 0.0025
+    corr = results['rip']; corr = corr.sel(shuffle=False) - corr.sel(shuffle=True).mean(dim='shuffle') # increase from shuffle
+    vmin = 0.001; vmax = 0.0027
     label = [None,r'$\langle$Δ Spearman corr$\rangle$']
-    reg = corr.reg.values[1]
+    reg = 'hpc-pfc'
     AA = []
     for a, isa in enumerate([True,False]):
         reg_data = corr.sel(reg=reg, isa=isa)
-        # significance
-        w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-        _, h = fma.statistics.holmBonferroni(w, return_reject=True)
-        # plot result
         #AA.append( mask_quadrant(reg_data.mean(dim='rat',skipna=True)) )
         AA.append(reg_data.mean(dim='rat',skipna=True))
-        out = isau.plotCMap(AA[-1].T, vmin=vmin, vmax=vmax, smooth=.2, alpha=np.where(h,1.0,0.5),
-                       bar=label[a], ax=ax[a], reg=reg, aspect='preserve')
+        out = isau.plotCMap(AA[-1].T, vmin=vmin, vmax=vmax, smooth=SMOOTH, bar=label[a], ax=ax[a], reg=reg, aspect='preserve')
         ax[a].set_title('ISA' if isa else 'nISA', fontsize=7, pad=2)
     ax[1].set(ylabel='')
     out[1].ax.set_box_aspect(None)
     bb = ax[-1].get_position()
-    dy = 0.02
-    out[1].ax.set_position([bb.xmax+0.03, bb.ymin+dy, 0.01, bb.height-2*dy])
+    dy = 0.1
+    out[1].ax.set_position([bb.xmax+0.01, bb.ymin, 0.01, bb.height-dy])
     axs['xcorr_rip_cb'] = out[1].ax
 
     # bootstrap upper-right quadrant
-    ax = isau.axes(fig, 0, VSPACE, 2.8, 1, ax[-2], 'th')
+    ax = isau.axes(fig, 1.5, 0, 0.85, 0.5, ax[-1], 'lh')
     valid = corr.rat != 11
     reg_data = corr.sel(reg=reg, rat=valid)
     reg_data = np.nanmax(mask_quadrant(reg_data),(2,3)) # upper-right quadrant
@@ -124,21 +123,16 @@ def main():
 
 
     # deltas xCorr
-    left, top, width, height = isau.pos(ax)
-    ax = [isau.axes(fig, LEFT+i*(height+VSPACE), top, height, height) for i in range(2)]
+    left, top, width, height = isau.pos(axs['xcorr_rip_ISA'])
+    ax = [isau.axes(fig, LEFT+i*(height+VSPACE), top+height+VSPACE, height, height) for i in range(2)]
     for n, a in zip(('xcorr_del_ISA','xcorr_del_nISA'), ax): axs[n] = a
     corr = results['delta']
     vmin = 0.0005; vmax = 0.0027
     label = [None,r'$\langle$Δ Spearman corr$\rangle$']
-    reg = corr.reg.values[1]
     for a, isa in enumerate([True,False]):
         reg_data = corr.sel(reg=reg, isa=isa)
-        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
-        # significance
-        w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-        _, h = fma.statistics.holmBonferroni(w, return_reject=True)
-        # plot result
-        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2, alpha=np.where(h,1.0,0.5),
+        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True).mean(dim='shuffle')
+        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=SMOOTH,
                        bar=label[a], ax=ax[a], reg=reg, aspect='preserve', cmap='plasma')
         ax[a].set_title('ISA' if isa else 'nISA', fontsize=7, pad=2)
     out[1].ax.set_box_aspect(None)
@@ -148,26 +142,18 @@ def main():
     axs['xcorr_del_cb'] = out[1].ax
 
 
-
-
-
-
     # spindles xCorr
-    _, top, width, height = isau.pos(ax[-1])
-    ax = [isau.axes(fig, LEFT+i*(height+VSPACE), top+height+VSPACE, height, height) for i in range(2)]
+    left, top, width, height = isau.pos(axs['xcorr_rip_ISA'])
+    ax = [isau.axes(fig, left+i*(height+VSPACE), top+height+VSPACE, height, height) for i in range(2)]
     for n, a in zip(('xcorr_spin_ISA','xcorr_spin_nISA'), ax): axs[n] = a
     corr = results['spin']
-    vmin = 0.000; vmax = 0.002
+    vmin = 0.0001; vmax = 0.00055
     label = [None,r'$\langle$Δ Spearman corr$\rangle$']
     reg = corr.reg.values[1]
     for a, isa in enumerate([True,False]):
         reg_data = corr.sel(reg=reg, isa=isa)
-        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True)
-        # significance
-        w = scipy.stats.wilcoxon(reg_data, axis=0, nan_policy='omit', alternative='greater').pvalue
-        _, h = fma.statistics.holmBonferroni(w, return_reject=True)
-        # plot result
-        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=.2, alpha=np.where(h,1.0,0.5),
+        reg_data = reg_data.sel(shuffle=False) - reg_data.sel(shuffle=True).mean(dim='shuffle')
+        out = isau.plotCMap(reg_data.mean(dim='rat',skipna=True).T, vmin=vmin, vmax=vmax, smooth=SMOOTH,
                        bar=label[a], ax=ax[a], reg=reg, aspect='preserve', cmap='cividis')
         ax[a].set_title('ISA' if isa else 'nISA', fontsize=7, pad=2)
     out[1].ax.set_box_aspect(None)
@@ -175,7 +161,6 @@ def main():
     dy = 0.02
     out[1].ax.set_position([bb.xmax+0.03, bb.ymin+dy, 0.01, bb.height-2*dy])
     axs['xcorr_spin_cb'] = out[1].ax
-
 
 
 

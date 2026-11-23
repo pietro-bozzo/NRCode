@@ -20,30 +20,40 @@ exp = xr.concat((exp1,exp2), dim='sleep', join='outer'); exp = exp.sel(base=base
 relable = lambda x : np.unique(x, return_inverse=True)[1]
 ax = []
 for i, r in enumerate(regs):
-    dcc = []; rat = []; session = []; isa = []; time = []; valid = []
+    dcc = []; rat = []; session = []; isa = []; time = []; valid = []; perc = []
     for sl in range(2):
         for k, s in enumerate(states):
-            h = fit.sel(sleep=sl, reg=r, state=s, val='p').values < 0.05 # failed sessions get h False since p is nan
-            signif = np.all(h, axis=1) # sessions where the fit was performed and significant for S and D
+            ok = np.all(~np.isnan(fit.sel(sleep=sl, reg=r, state=s, val='p')), axis=1) # sessions where a fit was performed
+            h = fit.sel(sleep=sl, reg=r, state=s, val='p')[ok].values < 0.05
+            signif = np.all(h, axis=1) # sessions where the fit was successful
+            perc.append(float(signif.mean())) # percentage of successful fits
             dcc.append(exp.sel(sleep=sl, reg=r, state=s, val='DCC').copy(deep=True))
-            dcc[-1][~signif] = np.nan
+            dcc[-1][~ok] = np.nan
+            dcc[-1][ok][~signif] = np.nan
             # save metadata
             rat.append(dcc[k].rat.values)
             session.append(dcc[k].base)
             isa.append(np.full(dcc[k].shape, k))
             time.append(np.full(dcc[k].shape, sl))
-            valid.append(signif.astype(int))
-    valid = np.mean(valid, axis=0) > 0.5 # sessions where at least half conditions were significant
+            ok[ok] = signif
+            valid.append(ok.values.astype(int))
+    valid = np.mean(valid, axis=0) >= 0.5 # sessions where at least half conditions were significant
+    print(r, perc)
 
     for k in range(len(dcc)):
         dcc[k] = dcc[k][valid]; rat[k] = rat[k][valid]; session[k] = session[k][valid]; isa[k] = isa[k][valid]; time[k] = time[k][valid]
         dcc[k][np.isnan(dcc[k])] = dcc[k][~np.isnan(dcc[k])].max() # input non significant fits with highest observed distance
 
     ax.append(isau.axes(fig, LEFT+i*5.3, TOP, 5,2.5))
-    fma.plotting.boxPlot(dcc, mode='scatter', ax=ax[-1], color=isau.paperColors(r))
+    fma.plotting.boxPlot(dcc, mode='scatter', ax=ax[-1], color=isau.paperColors((r,'shuffle',r,'shuffle')))
     #isau.pair_violin((dcc[0],dcc[1]), (rat[0],rat[1]), ax=ax[-1], color=isau.paperColors((r,'shuffle')), label=('ISA','nISA'))
     #isau.pair_violin((dcc[2],dcc[3]), (rat[2],rat[3]), center=2, ax=ax[-1], color=isau.paperColors((r,'shuffle')), label=('ISA','nISA'))
     ax[-1].set(xlim=(-1,4))
+
+    b, _, p, _ = fma.statistics.hierarchicalBootstrap(tuple(dcc[k] for k in range(2)), tuple(rat[k] for k in range(2)), paired=True, alternative='less')
+    print('s1', p[0], end=' ')
+    b, _, p, _ = fma.statistics.hierarchicalBootstrap(tuple(dcc[k] for k in range(2,4)), tuple(rat[k] for k in range(2,4)), paired=True, alternative='less')
+    print('s2', p[0])
 
     # relabel rats and sessions in {0, N}, map condition and time to +/- 0.5
     dcc = np.concatenate(dcc); rat = relable(np.concatenate(rat)); session = relable(np.concatenate(session))
@@ -54,6 +64,8 @@ for i, r in enumerate(regs):
                     vc_formula={"session": "0 + C(session)"}   # session nested in subject
                     ).fit(reml=True)
     print(r.upper(), m.summary())
+
+
 
 
 fig.show()

@@ -7,18 +7,50 @@ import pathlib
 froot = pathlib.Path().cwd().parent.parent.parent / 'Results'
 res_root = froot / 'Data'
 output_file = froot / 'FinalFigures' / 'Fig3'
-LEFT = 0.8; TOP = 0.3; HSPACE = 1.5; VSPACE = 1
+LEFT = 0.8; TOP = 0.3; HSPACE = 1.5; VSPACE = 1; VWIDTH = 1.3; PMODE = 'hb'; PALT = 'less'
+HEIGHTS = np.array([3,2,2]); TOPS = np.cumsum([TOP]+list(HEIGHTS+VSPACE))
 axs = {}
 fig = fma.plotting.figure(n=0, size=(17.5,10.9))
 
+
+# --- first row ---
+rid = 0
+
 # example
-ax = isau.axes(fig, LEFT, TOP, 7, 3)
-axs['example'] = ax
+results = isau.load_results(res_root / 'exampleISA.pkl')['oscill']
+ax = [isau.axes(fig, LEFT, TOPS[rid], 5, HEIGHTS[rid])]
+ax.append(isau.axes(fig, 0.5, 0, 4, 1, ax[0], 'lh'))
+start = results['start']; stop = results['stop']; t = results['t']; lfp = results['lfp']; fr = results['fr']
+spikes = results['spikes']; on = results['on']; offset = results['offset']; scale = results['scale']
+lw = 0.4
+for j, a in enumerate(ax):
+    axs[f'example{j}'] = a
+    if j:
+        start += 0.5; stop -= 0.5
+
+    fma.plotting.plotIntervals(on, start=start, stop=stop, ax=a)
+    fma.plotting.plotRaster(spikes, start=start, stop=stop, compact=True, color=isau.paperColors('nr'),
+                            offset=offset[j][3], lw=0.6, ax=a)
+    a.plot(t, (lfp[:,0]+offset[j][0])/scale[j][0], color='k', lw=lw)
+    a.plot(t, lfp[:,1]/scale[j][1], color='k', lw=lw)
+
+    for k, eve in enumerate(('ripples','deltaWaves','spindles')):
+        ev = results[eve]
+        ev = fma.intervals.restrict(ev, [start,stop])
+        for e in ev:
+            d = fma.intervals.restrict(np.column_stack((t,lfp[:,min(k,1)])), e)
+            a.plot(d[:,0], (d[:,1]+offset[j][k])/scale[j][k], color=isau.paperColors(eve), lw=lw)
+
+    if not j:
+        fr[:,1] = fr[:,1] * scale[j][-1] + offset[j][-1]
+        fma.plotting.plotXY(fr, color=isau.paperColors('nr'), lw=lw, ax=a)
+    a.set(xlim=(start,stop), xticks=(), ylim=(-42 if j else -82,None), yticks=())
+    isau.timescale(a, start, stop, 0.1 if j else 0.5)
+    [a.spines[sp].set_visible(False) for sp in ('left','bottom')]
 
 # oscillations are more likely in ISA
 results = isau.load_results(res_root / 'ISACouplHpcPfc.pkl')
-width = 2.3
-ax = [isau.axes(fig, HSPACE+i*(0.4+width), 0, width, 1, ax, 'lh') for i in range(3)]
+ax = [isau.axes(fig, HSPACE+i*(0.4+VWIDTH), 0, VWIDTH, 1, ax[-1], 'lh') for i in range(3)]
 for n, a in zip(('base_rate_rip','base_rate_delta','base_rate_spin'), ax): axs[n] = a
 events = results['events']; rate = results['rate']; perc = results['perc']
 ylim = ((0,0.6), (0,0.6), (0,0.6))
@@ -26,21 +58,24 @@ yticks = ((0,0.2,0.4,0.6), (0,0.2,0.4,0.6), (0,0.2,0.4,0.6))
 for i, e in enumerate(events):
     tc = rate.sel(event=e, epoch='sleep0', coupl=False)
     isau.pair_violin(tuple(tc.sel(isa=a) for a in [True,False]), (tc.rat,)*2, color=isau.paperColors((e,'shuffle')), label=('ISA','nISA'),
-                     dx=0.3, ax=ax[i], ylim=ylim[i], yticks=yticks[i],)
+                     mode=PMODE, alternative=PALT, dx=0.3, ax=ax[i], ylim=ylim[i], yticks=yticks[i],)
 ax[0].set(ylabel='rate of events (Hz)')
 
 
 
+# --- second row ---
+rid += 1
+
 # ISA entrains oscillations
 results = isau.load_results(res_root / 'HpcPfcEntrainment.pkl')
 width = 2.9
-ax = [isau.axes(fig, i*(0.1+width), VSPACE, width, 2, axs['example'] ,'t') for i in range(3)]
+ax = [isau.axes(fig, LEFT+i*(0.1+width), TOPS[rid], width, HEIGHTS[rid]) for i in range(3)]
 for n, a in zip(('entrain_rip','entrain_delta','entrain_spin'), ax): axs[n] = a
 tc = results['tc']; kur = results['kur']
 ylim = ((0.25,1.75), (0.25,1.75), (0.25,1.75)) # ((0.5,1.5), (0.45,1.55), (0.25,1.75))
 yticks = ((0.25,1,1.75), (), ())
 for i, e in enumerate(events):
-    ax[i].axvline(2*np.pi, ls='--', lw=0.5, color='gray')
+    fma.plotting.plotIntervals([[0,np.pi],[2*np.pi,3*np.pi]], ax=ax[i])
     fma.plotting.semPlot(tc.phi, tc.sel(ev=e,shuf=True), saxis=2, polar=2, color='k', ax=ax[i], smooth=1, aprop={'facecolor':'none','lw':0.6})
     fma.plotting.semPlot(tc.phi, tc.sel(ev=e,shuf=False), polar=2, color=isau.paperColors(e), ax=ax[i], smooth=1.5)
     ax[i].set(ylim=ylim[i], yticks=yticks[i])
@@ -50,29 +85,30 @@ ax[0].set(ylabel='tuning curve')
 
 
 # R
-width = 1.3
-ax = [isau.axes(fig, HSPACE+i*(0.7+width), 0, width, 1, ax[-1], 'lh') for i in range(3)]
+ax = [isau.axes(fig, HSPACE+i*(0.7+VWIDTH), 0, VWIDTH, 1, ax[-1], 'lh') for i in range(3)]
 for n, a in zip(('R_rip','R_delta','R_spin'), ax): axs[n] = a
 ylim = ((0,0.25), (0,0.25), (0,0.25))
 yticks = ((0,0.1,0.2,0.3), (0,0.1,0.2,0.3), (0,0.1,0.2,0.3))
 for i, e in enumerate(events):
     tc = kur.sel(ev=e, val='R')
     isau.pair_violin((tc.sel(shuf=False), tc.isel(shuf=17)), (tc.rat,)*2, color=(isau.paperColors((e)),'k'), label=('obs','sur'),
-                     vprop=({},{'facecolor':'none','lw':0.6}), ax=ax[i], ylim=ylim[i], yticks=yticks[i])
+                     mode=PMODE, alternative=PALT, vprop=({},{'facecolor':'none','lw':0.6}), ax=ax[i], ylim=ylim[i], yticks=yticks[i])
 ax[0].set(ylabel='modulation strength')
 
 
 
+# --- third row ---
+rid += 1
+
 # coupled oscillations are more likely in ISA
-width = 1.3
-ax = [isau.axes(fig, i*(0.7+width), VSPACE, width, 2, axs['entrain_rip'], 't') for i in range(3)]
+ax = [isau.axes(fig, LEFT+i*(0.7+VWIDTH), TOPS[rid], VWIDTH, HEIGHTS[rid]) for i in range(3)]
 for n, a in zip(('coupl_rate_rip','coupl_rate_delta','coupl_rate_spin'), ax): axs[n] = a
 ylim = ((0,0.035), (0,0.015), (0,0.08))
 yticks = ((0,0.01,0.02,0.03), (0,0.01,0.02), (0,0.05,0.1))
 for i, e in enumerate(events):
     tc = rate.sel(event=e, epoch='sleep0', coupl=True)
     isau.pair_violin(tuple(tc.sel(isa=a) for a in [True,False]), (tc.rat,)*2, color=isau.paperColors((e,'shuffle')), label=('ISA','nISA'),
-                     ax=ax[i], ylim=ylim[i], yticks=yticks[i])
+                     mode=PMODE, alternative=PALT, ax=ax[i], ylim=ylim[i], yticks=yticks[i])
     ax[i].ticklabel_format(axis='y',style='sci',scilimits=(-1,-1),useMathText=True)
     ax[i].yaxis.get_offset_text().set_fontsize(5)
 ax[0].set(ylabel='rate of coupled events (Hz)')
@@ -89,7 +125,6 @@ ax[0].set(ylabel='rate of coupled events (Hz)')
 #     isau.pair_violin(tuple(tc.sel(isa=a) for a in [True,False]), (tc.rat,)*2, color=isau.paperColors((e,'shuffle')), label=('ISA','nISA'),
 #                      ax=ax[i], ylim=ylim[i], yticks=yticks[i])
 # ax[0].set(ylabel='P of coupling')
-
 
 
 

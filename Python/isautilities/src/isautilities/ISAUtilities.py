@@ -1,5 +1,6 @@
 import numpy as np
 import fmatoolbox as fma
+import scipy.stats
 import matplotlib.axes as mpla
 import matplotlib.backends.backend_agg
 import matplotlib.lines
@@ -143,6 +144,23 @@ def rectangle(ax, left, top, width, height, text=None, **kwargs):
     return rect
 
 
+def timescale(ax, start, stop, sec, dir='x'):
+    left, top, width, height = pos(ax)
+    if dir == 'x':
+        scale = width * sec / (stop - start)
+        x = (left+width-scale, left+width)
+        y = (top+height+0.15, top+height+0.15)
+        t = (np.mean(x), top+height+0.3)
+    else:
+        scale = height * sec / (stop - start)
+        x = (left+width+0.15, left+width+0.15)
+        y = (top+height-scale, top+height)
+        t = (left+width+0.3, np.mean(y))
+    line(ax, x, y, color='k', lw=0.6)
+    text(ax, t[0], t[1], f'{sec} s', fontsize=5, ha='center', va='center')
+    return
+
+
 def cm_box_to_inches(fig, left, top, width, height):
     """(left, top, width, height) in cm from the figure's top-left
     -> Bbox in inches from the figure's bottom-left (what ``bbox_inches`` expects)"""
@@ -218,6 +236,7 @@ def save_axes_figs(axs, fig, froot):
 
 
 def plotCMap(x, ax=None, reg=None, **kwargs):
+    out = None
     if ax is not None and reg is not None:
         reg = str(reg)
         ax.set(xlabel=f'{reg.split('-')[1].upper()} lag (s)',ylabel=f'{reg.split('-')[0].upper()} lag (s)')
@@ -303,25 +322,40 @@ def ISAxes(axs, span=None, double:bool=None, format='paper', **ax_kwargs):
     return
 
 
-def pair_violin(x, g, ax, mode='pair', center=0, dx=0.3, label=(None,None), log=None, bw=0.5, color=(None,None),
-                vprop=({},{}), pdraw=None, yticks=None, ylim2=None, **kwargs):
+def pair_violin(x, g, ax, mode='hb', alternative=None, center=0, dx=0.3, label=(None,None), log=None, bw=0.5,
+                color=(None,None), vprop=({},{}), pdraw=None, yticks=None, ylim2=None, **kwargs):
 
-    boot = fma.statistics.hierarchicalBootstrap(x, g)
-    if log: boot = tuple(np.log(b[b>0]) for b in boot)
-    fma.plotting.boxPlot((boot[0],), x=center, mode='violin', bw_method=bw, side='low', color=color[0], **vprop[0], ax=ax)
-    fma.plotting.boxPlot((boot[1],), x=center+dx, mode='violin', bw_method=bw, color=color[1], **vprop[1], ax=ax)
-    ax.set(xlim=(center-0.8,center+0.8+dx), xticks=(center-0.3,center+0.3+dx), xticklabels=label, **kwargs)
-    ax.tick_params(axis='x', pad=10, labelsize=7)
-
+    boot, _, p, _ = fma.statistics.hierarchicalBootstrap(x, g, paired=True, alternative=alternative)
     if mode == 'zero':
-        p = [fma.statistics.hierarchicalBootstrapTest(x[i], g[i]) for i in range(len(x))]
-        fma.plotting.pBar([[0,0,p[0][0]],[1,1,p[1][0]]], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
+        p = [fma.statistics.hierarchicalBootstrap(x[i], g[i])[2] for i in range(len(x))]
+        print('p:', p)
+        p = [[0,0,p[0][0]],[1,1,p[1][0]]]
     elif mode == 'diff':
         p = fma.statistics.hierarchicalBootstrapTest(x[0]-x[1], g[0])
-        fma.plotting.pBar([0,1,p[0]], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
-    else:
+        print('p:', p)
+        p = [0,1,p[0]]
+    elif mode == 'pair':
         p = fma.statistics.hierarchicalBootstrapTest(x, g, paired=True)
-        fma.plotting.pBar([0,1,p], x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
+        print('p:', p)
+        p = [0,1,p]
+    elif mode == 'wilcoxon':
+        p = scipy.stats.wilcoxon(x[0], x[1], nan_policy='omit').pvalue
+        print('p:', p)
+        p = [0,1,p]
+    elif mode == 'hb':
+        print('p:', p)
+        p = [0,1,p[0]]
+    else:
+        p = fma.statistics.hierarchicalBootstrapTest(x, g)
+        print('p:', p)
+        p = [0,1,p]
+
+    ax.set(xlim=(center-0.8,center+0.8+dx), xticks=(center-0.3,center+0.3+dx), xticklabels=label, **kwargs)
+    ax.tick_params(axis='x', pad=10, labelsize=7)
+    if log: boot = tuple(np.log(b[b>0]) for b in boot)
+    fma.plotting.boxPlot((boot[:,0],), x=center, mode='violin', bw_method=bw, side='low', color=color[0], **vprop[0], ax=ax)
+    fma.plotting.boxPlot((boot[:,1],), x=center+dx, mode='violin', bw_method=bw, color=color[1], **vprop[1], ax=ax)
+    fma.plotting.pBar(p, x=(center-0.2,center+dx+0.2), ax=ax, draw=pdraw)
 
     if yticks is not None: ax.set(yticks=yticks)
     if ylim2 is not None: ax.set(ylim=ylim2)

@@ -81,22 +81,7 @@ for cb in reversed(cbs):
     y += dy
 
 # timescale
-def timescale(ax, start, stop, sec, dir='x'):
-    left, top, width, height = isau.pos(ax)
-    if dir == 'x':
-        scale = width * sec / (stop - start)
-        x = (left+width-scale, left+width)
-        y = (top+height+0.15, top+height+0.15)
-        t = (np.mean(x), top+height+0.3)
-    else:
-        scale = height * sec / (stop - start)
-        x = (left+width+0.15, left+width+0.15)
-        y = (top+height-scale, top+height)
-        t = (left+width+0.3, np.mean(y))
-    isau.line(ax, x, y, color='k', lw=0.6)
-    isau.text(ax, t[0], t[1], f'{sec} s', fontsize=5, ha='center', va='center')
-    return
-timescale(ax, start, stop, 500)
+isau.timescale(ax, start, stop, 500)
 
 
 # example zoomed
@@ -129,7 +114,7 @@ for i in range(len(ticks)):
     if i % 2: ticks[i].tick1line.set_visible(False)
 
 # timescale
-timescale(ax, start, stop, 20)
+isau.timescale(ax, start, stop, 20)
 
 
 # example zoomed firing rates
@@ -138,7 +123,7 @@ ax = []; new_height = height / 3
 for i in range(3):
     ax.append(isau.axes(fig, left+width+GAP, top+new_height*i, width/2, new_height))
     axs[f'example_fr{i}'] = ax[-1]
-fr = results['fr_zoom_avg']
+start = results['start_fr_zoom']; v = results['stop_fr_zoom']; fr = results['fr_zoom_avg']
 regs = ('pfc','hpc','nr')
 for i, r in enumerate(regs):
     ax[i].plot(fr[:,0], fr[:,i+1], color=isau.paperColors(r), lw=0.8)
@@ -153,8 +138,8 @@ ax[-1].set(xticks=())
 ax[-1].spines.bottom.set_visible(False)
 
 # timescale
-timescale(ax[-1], start, stop, 20)
-timescale(ax[-1], 0, 5, 1, dir='y')
+isau.timescale(ax[-1], start, stop, 20)
+isau.timescale(ax[-1], 0, 5, 1, dir='y')
 
 
 # example cycle
@@ -181,9 +166,9 @@ ax.spines.bottom.set_visible(False); ax.yaxis.labelpad = 0.7
 left, top, width, height = isau.pos(ax)
 isau.line(fig, [left+width*8/9,left+width], [top+3*height+0.15,top+3*height+0.15], color='k', lw=0.6)
 isau.text(fig, left+width*8.5/9, top+3*height+0.2, '2 s', fontsize=4, ha='center', va='top')
-perc = 0.35
+perc = 0.25
 isau.rectangle(ax, left - width*perc/2, top - height*perc/2, width*(1+perc), height*(1+perc), fc='none', ec='k', lw=0.4, ls='--')
-timescale(ax, start, stop, 5)
+isau.timescale(ax, start, stop, 5)
 
 
 
@@ -205,13 +190,10 @@ for i, r0 in enumerate(ccg_10.reg0.values):
         if j == 0:
             axs[f'fr_{r0}'] = ax[i][j]
             ax[i][j].set_title(f'   {r0.upper()}', size=6, loc='left', pad=-10)
-            # old: non-bootstrapped, ylim: (0,8)
-            #fma.plotting.boxPlot(tuple(fr[r0].sel(cond=c) for c in conditions), mode='violin', color=isau.paperColors(conditions), ax=ax[i][j])
-            p = fma.statistics.hierarchicalBootstrapTest(tuple(fr[r0].sel(cond=c) for c in conditions), (fr[r0].rat,)*len(conditions), paired=True)
-            b = fma.statistics.hierarchicalBootstrap(tuple(fr[r0].sel(cond=c) for c in conditions), (fr[r0].rat,)*len(conditions))
+            b, _, p, t = fma.statistics.hierarchicalBootstrap(tuple(fr[r0].sel(cond=c) for c in conditions), (fr[r0].rat,)*len(conditions), paired=True)
             fma.plotting.boxPlot(b, mode='violin', bw_method=0.5, color=isau.paperColors(conditions), ax=ax[i][j])
             ax[i][j].set(ylim=(1,4))
-            fma.plotting.pBar(p[['Condition 1', 'Condition 2', 'Corrected p-value']], draw=(True,False,False,False), ax=ax[i][j])
+            fma.plotting.pBar(np.column_stack((t['labels'],p)), draw=(True,False,False,False), ax=ax[i][j])
             ax[i][j].set(xticks=(), ylabel='' if i else 'firing rate (Hz)', ylim=(1,4.5), yticks=(1,4))
 
         # 2. BI
@@ -220,11 +202,9 @@ for i, r0 in enumerate(ccg_10.reg0.values):
             ax[i][j].set_title(f'   {r0.upper()}', size=6, loc='left', pad=-10)
             # non-bootstrapped
             fma.plotting.boxPlot(tuple(bi[r0].sel(cond=c) for c in conditions), mode='violin', color=isau.paperColors(conditions), ax=ax[i][j])
-            p = fma.statistics.hierarchicalBootstrapTest(tuple(bi[r0].sel(cond=c) for c in conditions), (bi[r0].rat,)*len(conditions), paired=True)
-            #b = fma.statistics.hierarchicalBootstrap(tuple(bi[r0].sel(cond=c) for c in conditions), (bi[r0].rat,)*len(conditions))
-            #fma.plotting.boxPlot(b, mode='violin', bw_method=None, color=isau.paperColors(conditions), ax=ax[i][j])
-            ax[i][j].set(ylim=(-1,1))
-            fma.plotting.pBar(p[['Condition 1', 'Condition 2', 'Corrected p-value']], draw=(True,False,False,False), ax=ax[i][j])
+            _, _, p, t = fma.statistics.hierarchicalBootstrap(tuple(bi[r0].sel(cond=c) for c in conditions), (bi[r0].rat,) * len(conditions), paired=True)
+            ax[i][j].set(ylim=(-1,0.8))
+            fma.plotting.pBar(np.column_stack((t['labels'],p)), draw=(True,False,False,False), ax=ax[i][j])
             ax[i][j].set(xticks=(), ylabel='' if i else 'burst index', ylim=(-1,1), yticks=(-1,0,1))
 
         # 3. CCGs
