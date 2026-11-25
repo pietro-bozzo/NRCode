@@ -1,6 +1,7 @@
 import fmatoolbox as fma
 import isautilities as isau
 import numpy as np
+import matplotlib.pyplot as plt
 import pathlib
 
 # parameters
@@ -13,9 +14,20 @@ fig = fma.plotting.figure(n=0, size=(FW,FH))
 axs = {}
 
 
+# --- first row ---
+rid = 0
+
+# behavioral protocol cartoon
+ax = isau.axes(fig, LEFT, TOPS[rid],7.3, HEIGHTS[rid])
+ax.imshow(plt.imread(res_root / 'behavior_placeholder.png'))
+bb = ax.get_position()
+ax.set_position((0.4/FW, bb.y0, bb.width, bb.height))
+ax.axis("off")
+
+
 # ISA proportion is unchanged
 results = isau.load_results(res_root / 'detectISA.pkl')
-ax = isau.axes(fig, FW/2+GAP/2, TOP, 1.95, 2.5)
+ax = isau.axes(fig, FW/2+GAP/2, TOPS[rid], 1.95, 2.5)
 axs['ISA_frac_s2'] = ax
 frac1, frac2 = results['ISA_s1_s2']; frac1 = frac1.sel(region='nr'); frac2 = frac2.sel(region='nr')
 isau.pair_violin((frac1*100,frac2*100), (frac1.rat,frac2.rat), ax=ax, color=isau.paperColors(('nr','nr')),
